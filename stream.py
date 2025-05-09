@@ -1,6 +1,6 @@
 import time
 from langchain_elasticsearch import ElasticsearchRetriever
-from typing import Dict, AsyncIterator
+from typing import Dict, AsyncIterator, Optional
 #from langchain.llms import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain_community.embeddings import OpenAIEmbeddings
@@ -98,14 +98,9 @@ class Retrieval:
             "the question. If you don't know the answer, say that you "
             "don't know. Also do not perform any calculations"
             "Provide the answers in small and multiple sentences." 
-            "Start the conversation with a basic sentence such as “Sure, let me get that for you”, “Understood”"
-            "Try to mimic natural spoken speech"
-            "Consider the examples:" 
-            "Query 1: What is the TFR of Bihar?"
-            "Response 1: Sure...  Let me get the answer for you from the database. The total fertility rate of Bihar is 3.0"
-            "Try to be conversational"
+            
             "\n\n"
-            "You will always begin your responses with one of the following sentences: Sure, let me get that for you or Understood{context}"
+            "{context}"
         )
         self.qa_prompt = ChatPromptTemplate.from_messages(
             [
@@ -153,25 +148,36 @@ class Retrieval:
         )
         return retriever
     
-    async def response_llm(self, query: str, email) -> AsyncIterator[str]:
+    async def response_llm(self, query: str, email: Optional[str] = None) -> str:
         start_time = time.time()
-        callback_handler = StreamingStdOutCallbackHandler()
+        # callback_handler = StreamingStdOutCallbackHandler() # Optional: Print to console
 
-        async for chunk in self.conversational_rag_chain.astream(
-            {"input": query},
-            {"configurable": {"session_id": email}},
-            #callbacks=[callback_handler] # Optional: Print to console
-        ):
-            try:
+        config = {}
+        if email:
+            config["configurable"] = {"session_id": email}
+
+        result = []  # To accumulate the response chunks
+
+        try:
+            async for chunk in self.conversational_rag_chain.astream(
+                {"input": query},
+                config,
+                # callbacks=[callback_handler]
+            ):
                 if answer_chunk := chunk.get("answer"):
-                    yield answer_chunk
-            except Exception as e:
-                logging.error(f"Error during streaming: {e}")
-                yield f"Error processing response chunk: {e}"
+                    result.append(answer_chunk)
+        except Exception as e:
+            logging.error(f"Error during streaming: {e}")
+            return f"Error processing response chunk: {e}"
+
+        # Join the response chunks and return the result as a single string
+        response = "".join(result)
 
         save_store(self.store)
         total_time = time.time() - start_time
         #print(f"Total `response_llm` execution time: {total_time:.4f} seconds")
+
+        return response
 
     def save_store(self):
         with open(STORE_FILE, "wb") as f:
