@@ -15,11 +15,10 @@ class AgentConfig:
     """Configuration settings for the agent decision system."""
     
     # Decision model
-    DECISION_MODEL = "gpt-4o"  # or whichever model you prefer
+    DECISION_MODEL = "gpt-35-turbo"  # or whichever model you prefer
     
     # Vision model for image analysis
-    VISION_MODEL = "gpt-4o"
-    
+    VISION_MODEL = "gpt-35-turbo"
     # Confidence threshold for responses
     CONFIDENCE_THRESHOLD = 0.85
     
@@ -29,14 +28,15 @@ class AgentConfig:
     is best suited to handle it based on the query content, presence of images, and conversation context.
 
     Available agents:
-    1. CONVERSATION_AGENT - For general chat and greetings.
-    2. RAG_AGENT - For specific knowledge about population dynamics and health indicators in India and its districts, along with emerging health and family welfare issues or  fertility, infant and child mortality, family planning practices, maternal and child health, reproductive health, nutrition in Indiand and its districts'.
-    3. WEB_SEARCH_PROCESSOR_AGENT - For questions about recent medical developments, current outbreaks, or time-sensitive medical information.
-    Make your decision based on these guidelines:
-    - If the user has not uploaded any image, always route to the conversation agent.
-    - If the user asks about recent medical developments or current health situations, use the web search pocessor agent.
-    - If the user asks specific knowledge questions, use the RAG agent.
-    - For general conversation, greetings, or non-medical questions, use the conversation agent. 
+    1. CONVERSATION_AGENT - For general chat, greetings, and any questions **not** falling into the other categories, including general questions about India and its districts that are not related to health or population.
+    2. RAG_AGENT - For specific knowledge about **population dynamics and health indicators in India and its districts**, including:
+   - Fertility
+   - Infant and child mortality
+   - Family planning practices
+   - Maternal and child health
+   - Reproductive health
+   - Nutrition
+   - Emerging health and family welfare issues 
 
     You must provide your answer in JSON format with the following structure:
     {{
@@ -64,11 +64,24 @@ class AgentConfig:
     - "What is the weather?"
     - "Hi, how are you?"
 
+    3. **denial** — the user refuses to provide information or objects to answering.
+    Examples:
+    - "I don't want to tell you that"
+    - "Why do you need my email?"
+    - "I prefer not to share my age"
+    - "That's personal"
+    - "None of your business"
+
     Respond ONLY in the following JSON format:
     {
-    "intent": "answer" | "query"
+    "intent": "answer" | "query" | "denial"
     }
     """
+
+    PURPOSE_CLASSIFIER_PROMPT = """You are a purpose classifier assistant.
+    
+    The user tries to object to the question being asked to them for data collection and ypur sole purpose is to make them understand about the purpose of data collection.
+    The purpose of data collection is to store user data in to database so that it can help in better governance to the government."""
 
 class IntentRouter:
     def __init__(self):
@@ -153,7 +166,23 @@ class IntentRouter:
 
         return intent
 
-    
+    async def purpose_classifier(self, user_input, question):
+        print("purpose_classifier")
+        messages = [
+            {"role": "system", "content": AgentConfig.PURPOSE_CLASSIFIER_PROMPT},
+            {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
+        ]
+
+        try: 
+            self.llm1.temperature = 0.7
+            response = self.llm1.invoke(messages)
+            return response.content.strip()
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+
+        
+
     async def interact(self, state):
         answers = state.get("answers", {})
         
@@ -215,6 +244,7 @@ class IntentRouter:
         builder.add_node("simple_llm", self.simple_llm)
         builder.add_node("RAG", self.RAG)
         builder.add_node("unknown_intent_handler", self.unknown_intent_handler)
+        builder.add_node("purpose_classifier", self.purpose_classifier)
 
         # Entry point
         builder.set_entry_point("route_agent")
@@ -261,6 +291,20 @@ class IntentRouter:
                         "has_image": has_image,
                         "email": email or answers.get("email", "default@example.com")
                     })
+                
+                elif intent == "denial":
+                    print("denial")
+                    current_key = state.get("current_key")
+                    current_question = dict(self.questions).get(current_key, "")
+                    explanation = await self.purpose_classifier(input_text, current_question)
+
+                    return {
+                        "status": "denial",
+                        "message": explanation + "\nCould you please reconsider answering the following?",
+                        "question": current_question,
+                        "current_key": current_key,
+                        "answers": answers
+                    }
 
                 else:
                     return {
@@ -295,14 +339,19 @@ async def simulate_user_interaction():
     out1 = await router.run("Rahul", state=state)
     print(out1)
 
+    out5 = await router.run("I don't want to tell you that", state=state)
+    print(out5)
+
     out2 = await router.run("25", state=state)
     print(out2)
 
     out3 = await router.run("rahul@example.com", state=state)
     print(out3)
 
-    out4 = await router.run("Tell me about fertility rates in India", state=state)
-    print(out4)
+   #out4 = await router.run("Tell me about fertility rates in India", state=state)
+    #print(out4)
+
+    
 
 if __name__ == "__main__":
     asyncio.run(simulate_user_interaction())
