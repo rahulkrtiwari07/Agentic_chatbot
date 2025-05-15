@@ -23,7 +23,7 @@ class SessionManager:
         return session_id
 
     def get_state(self, session_id):
-        return self.sessions.get(session_id, {"answers": {}, "current_key": None})
+        return self.sessions.get(session_id, {"answers": {}, "current_key": None, "welcomed": False})
 
     def update_state(self, session_id, state):
         self.sessions[session_id] = state
@@ -42,6 +42,8 @@ class AgentConfig:
     VISION_MODEL = "gpt-35-turbo"
     # Confidence threshold for responses
     CONFIDENCE_THRESHOLD = 0.85
+
+    WELCOME_MESSAGE = "May I ask you a few questions to better assist you?"
     
     # System instructions for the decision agent
     DECISION_SYSTEM_PROMPT = """You are an intelligent triage system that routes user queries to 
@@ -93,9 +95,16 @@ class AgentConfig:
     - "That's personal"
     - "None of your business"
 
+    4. **acceptance** - the user agrees to provide information to the questions when the user is welcomed and asked whether he is comfortable sharing hos personal information.
+    Exmaples:
+    - "Yes"
+    - "Yes i can give my information"
+    - "You can procedd further"
+    - "Ask the question and then i will decide whether i want to answer or not"
+
     Respond ONLY in the following JSON format:
     {
-    "intent": "answer" | "query" | "denial"
+    "intent": "answer" | "query" | "denial" | "acceptance"
     }
     """
 
@@ -177,6 +186,7 @@ class IntentRouter:
 
         try:
             result = self.llm1.invoke(messages)
+            print("[DEBUG] Intent classification raw output:", result.content)
             intent = json.loads(result.content).get("intent", "unknown")
         except Exception as e:
             logging.warning(f"Intent classification error: {e}")
@@ -296,6 +306,37 @@ class IntentRouter:
         answers = state.get("answers", {})
         state["answers"] = answers
 
+        if not state.get("welcomed", False):
+            if not input_text:
+                return {
+                    "status": "welcome",
+                    "message": f"Welcome! {AgentConfig.WELCOME_MESSAGE}",
+                    "session_id": session_id
+                }
+
+            # Classify intent of user's reply to welcome message
+            intent = self.classify_intent(input_text, AgentConfig.WELCOME_MESSAGE)
+
+            if intent == "denial":
+                explanation = await self.purpose_classifier(input_text, "May I ask you a few questions to better assist you?")
+                return {
+                    "status": "denial",
+                    "message": explanation + "\nCould you please reconsider starting with a few questions?",
+                    "session_id": session_id
+                }
+            elif intent in ("answer", "query", "acceptance"):
+                state["welcomed"] = True
+                self.session_manager.update_state(session_id, state)
+                response = await self.interact(state)
+                response["session_id"] = session_id
+                return response
+            else:
+                return {
+                    "status": "unclear_input",
+                    "message": "I couldn't understand that. Would you like to begin with a few questions to help guide our conversation?",
+                    "session_id": session_id
+                }
+
         # Handle personal information questions
         if len(answers) < len(self.questions):
             if input_text:
@@ -390,10 +431,14 @@ async def chat_loop():
     router = IntentRouter()
     session_id = None
 
-    # Start the conversation with initial question
+    # Start the conversation with initial welcome message
     response = await router.run(input_text=None, session_id=session_id)
     session_id = response.get("session_id", session_id)
-    if response.get("status") == "asking":
+
+    # Show welcome or first question
+    if response.get("status") == "welcome":
+        print(f"Bot: {response['message']}")
+    elif response.get("status") == "asking":
         print(f"Bot: {response['question']}")
 
     while True:
@@ -410,17 +455,20 @@ async def chat_loop():
         response = await router.run(user_input, session_id=session_id)
         session_id = response.get("session_id", session_id)
 
-        if response.get("status") == "asking":
+        if response.get("status") == "welcome":
+            print(f"Bot: {response['message']}")
+        elif response.get("status") == "asking":
             print(f"Bot: {response['question']}")
         elif response.get("status") == "denial":
             print(f"Bot: {response['message']}")
         elif response.get("status") == "unclear_input":
             print(f"Bot: {response['message']}")
-        elif response.get("response"):
-            print(f"Bot: {response['response']}")
         elif response.get("status") == "ready_for_questions":
             print(f"Bot: {response['message']}")
-
+        elif response.get("response"):
+            print(f"Bot: {response['response']}")
+        else:
+            print(f"Bot: {response.get('message', 'Something went wrong.')}")
 
 if __name__ == "__main__":
     asyncio.run(chat_loop())
