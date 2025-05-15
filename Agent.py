@@ -341,7 +341,7 @@ class IntentRouter:
 
                     return {
                         "status": "denial",
-                        "message": explanation + "\nCould you please reconsider answering the following?",
+                        "message": explanation + "\nCould you please reconsider answering the following?\n" + current_question,
                         "question": current_question,
                         "current_key": state.get("current_key"),
                         "answers": answers,
@@ -375,6 +375,7 @@ class IntentRouter:
             response["session_id"] = session_id
 
         return response
+
 
 
 
