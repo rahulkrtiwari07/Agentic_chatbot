@@ -104,7 +104,7 @@ class AgentConfig:
 
     Respond ONLY in the following JSON format:
     {
-    "intent": "answer" | "query" | "denial" | "acceptance"
+    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative"
     }
 
     5. **repeat** - If the user ask to repeat the question or clarify the question.
@@ -112,6 +112,13 @@ class AgentConfig:
     - "Can you please repeat the question"
     - "Pardon"
     - "I didn't get the question"
+
+    6. **negative** - If the user replies in negative for the question whether he wants to ask any other question or not."
+    Examples:
+    - "No"
+    - "No I don't want to"
+    - "No thanks"
+    - "No I am done"
     """
 
     PURPOSE_CLASSIFIER_PROMPT = """You are a purpose classifier assistant.
@@ -363,9 +370,14 @@ class IntentRouter:
                             "message": "Thank you! Would you like to ask any questions now?",
                             "session_id": session_id
                         }
+
+        
                     response = await self.interact(state)
                     response["session_id"] = session_id
                     return response
+
+                
+                    
 
                 elif intent == "query":
                     email = answers.get("email", "default@example.com")
@@ -412,6 +424,14 @@ class IntentRouter:
 
         # If all Q&A complete, continue with main processing
         email = answers.get("email", "default@example.com")
+        intent = self.classify_intent(input_text or "", "Would you like to ask any questions now?")
+
+        if intent == "negative":
+            return {
+                "status": "ended",
+                "message": "No problem. Feel free to return anytime. Goodbye!",
+                "session_id": session_id
+            }
         response = await self.graph.ainvoke({
             "input": input_text or "",
             "has_image": has_image,
@@ -428,13 +448,6 @@ class IntentRouter:
 
 
 
-
-# Example usage
-async def main():
-    router = IntentRouter()
-
-    out1 = await router.run("Rahul")
-    print(out1)
 
 async def chat_loop():
     router = IntentRouter()
@@ -476,6 +489,9 @@ async def chat_loop():
             print(f"Bot: {response['message']}")
         elif response.get("response"):
             print(f"Bot: {response['response']}")
+        elif response.get("status") == "ended":
+            print("Thanks for your support")
+            break
         else:
             print(f"Bot: {response.get('message', 'Something went wrong.')}")
 
