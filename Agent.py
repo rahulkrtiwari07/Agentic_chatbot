@@ -96,7 +96,7 @@ class AgentConfig:
     - "None of your business"
 
     4. **acceptance** - the user agrees to provide information to the questions when the user is welcomed and asked whether he is comfortable sharing hos personal information.
-    Exmaples:
+    Examples:
     - "Yes"
     - "Yes i can give my information"
     - "You can procedd further"
@@ -106,6 +106,12 @@ class AgentConfig:
     {
     "intent": "answer" | "query" | "denial" | "acceptance"
     }
+
+    5. **repeat** - If the user ask to repeat the question or clarify the question.
+    Examples:
+    - "Can you please repeat the question"
+    - "Pardon"
+    - "I didn't get the question"
     """
 
     PURPOSE_CLASSIFIER_PROMPT = """You are a purpose classifier assistant.
@@ -388,6 +394,9 @@ class IntentRouter:
                         "answers": answers,
                         "session_id": session_id
                     }
+
+                elif intent == "repeat":
+                    return {"message": current_question}
 
                 else:
                     return {
