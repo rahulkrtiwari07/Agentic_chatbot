@@ -43,7 +43,7 @@ class AgentConfig:
     # Confidence threshold for responses
     CONFIDENCE_THRESHOLD = 0.85
 
-    WELCOME_MESSAGE = "May I ask you a few questions to better assist you?"
+    WELCOME_MESSAGE = "Hello! My name is Luna. I am calling on behalf of Microware. May I ask you a few questions?"
     
     # System instructions for the decision agent
     DECISION_SYSTEM_PROMPT = """You are an intelligent triage system that routes user queries to 
@@ -71,15 +71,27 @@ class AgentConfig:
 
     INTENT_CLASSIFIER_PROMPT = """You are an intent classification assistant.
 
-    Determine whether the user’s message is:
+    Determine the user's intent based on the question they were asked and their response.
 
-    1. An **answer** to a personal information question (like name, age, or email).
+    User was asked the following question:
+    "{question}"
+
+    User replied with:
+    "{user_input}"
+
+    Possible intent categories:
+
+    1. An **answer** to a personal information question (like name, age, address or email).
     Examples of answers:
     - "Rahul"
     - "25"
     - "rahul@example.com"
     - "My name is Priya"
     - "I’m 30 years old"
+    - "I live in Ghaziabad district of Uttar Pradesh"
+    - "House number 04 Near post office district Nainital Uttarakhand"
+    - "Mumbai"
+    - "Delhi"
 
     2. Or a **query** asking for general or medical information, or starting a new conversation.
     Examples of queries:
@@ -87,7 +99,9 @@ class AgentConfig:
     - "What is the weather?"
     - "Hi, how are you?"
 
-    3. **denial** — the user refuses to provide information or objects to answering.
+    “IMPORTANT: If the user was asked ‘Is this your permanent address?’ and replies ‘No’, the intent should be classified as ‘Different address’, not ‘denial’.”
+
+    3. **denial** — the user refuses to provide personal information or objects to question.
     Examples:
     - "I don't want to tell you that"
     - "Why do you need my email?"
@@ -95,36 +109,64 @@ class AgentConfig:
     - "That's personal"
     - "None of your business"
 
-    4. **acceptance** - the user agrees to provide information to the questions when the user is welcomed and asked whether he is comfortable sharing hos personal information.
+    4. **acceptance** - The user agrees to provide information to the questions when the user is welcomed and asked whether he is comfortable sharing his personal information or 
+    when the user is asked whether the address provided by him is his permanent address and he replies positively or when the user is asked whether he has covid in the last five years and he replies positively.
     Examples:
+    - "Hii"
+    - "Hello"
     - "Yes"
     - "Yes i can give my information"
     - "You can procedd further"
     - "Ask the question and then i will decide whether i want to answer or not"
+    - "Yes"
+    - "Yes this is my permanent address"
 
-    Respond ONLY in the following JSON format:
-    {
-    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative"
-    }
+    
 
-    5. **repeat** - If the user ask to repeat the question or clarify the question.
+    5. **repeat** - The user asks for the question to be repeated or clarified.
     Examples:
     - "Can you please repeat the question"
     - "Pardon"
     - "I didn't get the question"
 
-    6. **negative** - If the user replies in negative for the question whether he wants to ask any other question or not."
+    6. **negative** - If the user replies in negative for the question "Would you like to ask any questions now?""
     Examples:
     - "No"
     - "No I don't want to"
     - "No thanks"
     - "No I am done"
+
+    7. **Different address** - The user indicates that the provided address is not their permanent address (e.g., in response to: "Is this your permanent address?")
+    Examples:
+    - "No"
+    - "No This is not my permanent address"
+    - "This is the address where I live and not my permanent address."
+    - "This is not the address mentioned on my government ID"
+
+
+    Respond ONLY in the following JSON format:
+    {
+    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative" | "Different address"
+    }
     """
 
-    PURPOSE_CLASSIFIER_PROMPT = """You are a purpose classifier assistant.
-    
-    The user tries to object to the question being asked to them for data collection and ypur sole purpose is to make them understand about the purpose of data collection.
-    The purpose of data collection is to store user data in to database so that it can help in better governance to the government."""
+    PURPOSE_CLASSIFIER_PROMPT = """
+    You are a purpose classification assistant.
+
+    Context:
+    - The user was asked the following question:
+    "{question}"
+    - The user responded with:
+    "{user_input}"
+
+    Instructions:
+    1. If the user objects to the question or refuses to provide information:
+    - Your sole role is to politely explain the **purpose of data collection**.
+    - Clarify that the information is collected to **store user data in a database** to support **better governance by the government**.
+
+    Be empathetic, informative, and clear in your response.
+    """
+
 
 class IntentRouter:
     def __init__(self):
@@ -141,9 +183,18 @@ class IntentRouter:
         self.retriever = self.retrieval.retrieve_data()
 
         self.questions = [
-            ("name", "What is your name?"),
+            ("name", "Could you please state your full name?"),
             ("age", "What is your age?"),
-            ("email", "What is your email address?")
+            ("address", "Can you please provide your address?"),
+            ("Confirm address", "Is this your permanent address"),
+            ("Permanent address", "Please let meknow your permanent address"),
+            ("covid", "Have you have covid in the past 5 years?"),
+            ("Year", "In which year did you last have covid"),
+            ("vaccinated","Were you avccinated at that time"),
+            ("No covid", "Have you ever shown symptons of covid"),
+            ("Vaccination before", "Have you ever been vaccinated for Covid?"),
+            ("email", "What is your email address?"),
+            ("Thanks", "Thank you! Would you like to ask any questions now?")
         ]
 
         self.log_path = "interaction.docx"
@@ -206,6 +257,8 @@ class IntentRouter:
             intent = "unknown"
 
         return intent
+
+    
 
     async def purpose_classifier(self, user_input, question):
         print("purpose_classifier")
@@ -319,6 +372,7 @@ class IntentRouter:
         answers = state.get("answers", {})
         state["answers"] = answers
 
+        # Handle initial welcome interaction
         if not state.get("welcomed", False):
             if not input_text:
                 return {
@@ -327,7 +381,7 @@ class IntentRouter:
                     "session_id": session_id
                 }
 
-            # Classify intent of user's reply to welcome message
+            # Classify intent of reply to welcome message
             intent = self.classify_intent(input_text, AgentConfig.WELCOME_MESSAGE)
 
             if intent == "denial":
@@ -350,101 +404,184 @@ class IntentRouter:
                     "session_id": session_id
                 }
 
-        # Handle personal information questions
+        # Handle personal information collection
         if len(answers) < len(self.questions):
             if input_text:
                 current_key = state.get("current_key")
+                print(current_key)
                 current_question = dict(self.questions).get(current_key, "")
-
                 intent = self.classify_intent(input_text, current_question)
 
-                if intent == "answer":
-                    if current_key:
-                        answers[current_key] = input_text
-                        state["answers"] = answers
+                if intent == "answer" and current_key in ["name", "age", "address", "email"] :
+                    answers[current_key] = input_text
+                    state["answers"] = answers
                     self.session_manager.update_state(session_id, state)
 
                     if current_key == "email":
+                        state["current_key"] = "Thanks"
+                        self.session_manager.update_state(session_id, state)
+                        next_question = dict(self.questions).get("Thanks", "")
                         return {
                             "status": "ready_for_questions",
-                            "message": "Thank you! Would you like to ask any questions now?",
+                            "message": next_question,
                             "session_id": session_id
                         }
 
-        
                     response = await self.interact(state)
                     response["session_id"] = session_id
                     return response
 
-                
+                if current_key == "address":
+                    state["current_key"] = "Confirm address"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("Confirm address", "")
+                    return {
+                        "status": "Permanent_address",
+                        "message": next_question,
+                        "session_id": session_id
+                    }
+
                     
 
-                elif intent == "query":
-                    email = answers.get("email", "default@example.com")
+                if current_key == "Confirm address" and intent == "acceptance":
+                    state["current_key"] = "covid"
                     self.session_manager.update_state(session_id, state)
-                    response = await self.graph.ainvoke({
-                        "input": input_text,
-                        "has_image": has_image,
-                        "email": email
-                    })
-                    response["session_id"] = session_id
-                    return response
+                    next_question = dict(self.questions).get("covid", "")
+                    return {
+                        "status": "correct address",
+                        "message": "Thanks for the clarification.\n" + next_question,
+                        "session_id": session_id
+                    }
 
-                elif intent == "denial":
-                    print("denial")
-                    current_question = dict(self.questions).get(state.get("current_key"), "")
+                if current_key == "Confirm address" and intent == "Different address":
+                    state["current_key"] = "Permanent address"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("Permanent address", "")
+                    return {
+                        "status": "correct address",
+                        "message": "Thanks for the clarification.\n" + next_question,
+                        "session_id": session_id
+                    }
+
+                if current_key == "Permanent address" and intent == "answer":
+                    state["current_key"] = "covid"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("covid", "")
+                    return {
+                        "status": "correct address",
+                        "message": "Thanks for the clarification.\n" + next_question,
+                        "session_id": session_id
+                    }
+
+                '''if intent == "Different address":
+                    state["current_key"] = "Permanent address"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("Permanent address", "")
+                    return {
+                        "status": "correct address",
+                        "message": next_question,
+                        "session_id": session_id
+                    }'''
+
+                if current_key == "covid" and intent == "acceptance":
+                    state["current_key"] = "Year"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("Year", "")
+                    return {
+                        "status": "Covid positive",
+                        "message": next_question,
+                        "session_id": session_id
+                    }
+
+                if current_key == "Year" and intent == "answer":
+                    state["current_key"] = "vaccinated"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("vaccinated", "")
+                    return {
+                        "status": "Covid positive",
+                        "message": next_question,
+                        "session_id": session_id
+                    }
+
+                if current_key == "vaccinated" and intent == "acceptance":
+                    state["current_key"] = "email"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("email", "")
+                    return {
+                        "status": "Covid positive",
+                        "message": next_question,
+                        "session_id": session_id
+                    }
+
+                if current_key == "covid" and intent == "denial":
+                    state["current_key"] = "No covid"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("No covid", "")
+                    return {
+                        "status": "Covid negative",
+                        "message": next_question,
+                        "session_id": session_id
+                    }
+
+                if current_key == "No covid":
+                    state["current_key"] = "email"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("email", "")
+                    return {
+                        "status": "Covid negative",
+                        "message": next_question,
+                        "session_id": session_id
+                    }
+
+
+
+                if intent == "denial":
                     explanation = await self.purpose_classifier(input_text, current_question)
-
-                    state["status"] = "denial"
-                    self.session_manager.update_state(session_id, state)
-
                     return {
                         "status": "denial",
-                        "message": explanation + "\nCould you please reconsider answering the following?\n" + current_question,
-                        "question": current_question,
-                        "current_key": state.get("current_key"),
-                        "answers": answers,
+                        "message": explanation + "\nCould you please reconsider answering this question?",
                         "session_id": session_id
                     }
 
-                elif intent == "repeat":
-                    return {"message": current_question}
-
-                else:
+                if intent == "repeat":
                     return {
-                        "status": "unclear_input",
-                        "message": "I couldn't tell if you're answering the question or asking something new. Could you clarify?",
+                        "status": "repeat",
+                        "message": f"Sure, here is the question again:\n{current_question}",
                         "session_id": session_id
                     }
-            else:
-                response = await self.interact(state)
-                self.session_manager.update_state(session_id, state)
-                response["session_id"] = session_id
-                return response
 
-        # If all Q&A complete, continue with main processing
-        email = answers.get("email", "default@example.com")
-        intent = self.classify_intent(input_text or "", "Would you like to ask any questions now?")
+                if current_key == "Thanks" and intent == "negative":
+                    return {
+                        "status": "ended",
+                        "message": "No problem. Feel free to return anytime. Goodbye!",
+                        "session_id": session_id
+                    }
 
-        if intent == "negative":
+
+            # If no input provided, or couldn't interpret intent
             return {
-                "status": "ended",
-                "message": "No problem. Feel free to return anytime. Goodbye!",
+                "status": "awaiting_input",
+                "message": f"Could you please answer the following question?\n{dict(self.questions).get(state.get('current_key'), '')}",
                 "session_id": session_id
             }
-        response = await self.graph.ainvoke({
-            "input": input_text or "",
-            "has_image": has_image,
-            "email": email
-        })
 
-        self.session_manager.update_state(session_id, state)
+        # All personal questions completed
+        if input_text:
+            # Route to appropriate agent
+            updated_state = {
+                "input": input_text,
+                "answers": answers,
+                "email": answers.get("email", "default@example.com")
+            }
+            async for output in self.graph.stream(updated_state):
+                return {**output, "session_id": session_id}
 
-        # Attach session_id for tracking
-        if isinstance(response, dict):
-            response["session_id"] = session_id
+        return {
+            "status": "awaiting_query",
+            "message": "Do you have any questions you'd like to ask?",
+            "session_id": session_id
+        }
 
-        return response
 
 
 
@@ -492,6 +629,8 @@ async def chat_loop():
         elif response.get("status") == "ended":
             print("Thanks for your support")
             break
+        elif response.get("status") == "confirm_permanent_address":
+            print(f"Bot: {response['message']}")
         else:
             print(f"Bot: {response.get('message', 'Something went wrong.')}")
 
