@@ -136,17 +136,38 @@ class AgentConfig:
     - "No thanks"
     - "No I am done"
 
-    7. **Different address** - The user indicates that the provided address is not their permanent address (e.g., in response to: "Is this your permanent address?")
+    7. **Different address** - If the user is asked "Is this your permanent address?") and he replies in following manner.
     Examples:
     - "No"
     - "No This is not my permanent address"
     - "This is the address where I live and not my permanent address."
     - "This is not the address mentioned on my government ID"
 
+    8. **impossible** - If the input provided by the user are redundant or not satisfactor in comparison to the question.
+    Examples:
+    - question : "Can you please state your full name"
+      answer : "xyz" or "123"
+
+    - question : "What is your age?"
+      answer : "1000" or "120"  (Age shaould be between 13-105)
+
+    - question : "Can you please state your full address?"
+      answer : "Mars", "Sun", "Moon" etc.      
+
+    9. **no vaccine** -  If the user replied negatively when asked whether he was vaccinated at that time.
+    Examples:
+    - "No"
+    - "No I wasn't vaccinated at that time"
+
+    10. **no covid** - When the user is asked "Have you have covid in the past 5 years" and he replies in follwing way.
+    Example:
+    - "No"
+    - "No I didn't had covid"
+
 
     Respond ONLY in the following JSON format:
     {
-    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative" | "Different address"
+    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative" | "Different address | "no vaccine" | "no covid"
     }
     """
 
@@ -165,6 +186,20 @@ class AgentConfig:
     - Clarify that the information is collected to **store user data in a database** to support **better governance by the government**.
 
     Be empathetic, informative, and clear in your response.
+    """
+
+    SERIOUS_ClASSIFIER_PROMPT = """
+    You are a purpose classifier assistant.
+    
+    Context:
+    - The user was asked the following question:
+    "{question}"
+    - The user responded with:
+    "{user_input}"
+
+    Instruction:
+    The user is not serious about providing the answers to the question or it seems that the input provided are not satisafactory so you need to make him understand that this data collection process
+    is for government record and that proper data enhances governance.
     """
 
 
@@ -196,6 +231,7 @@ class IntentRouter:
             ("email", "What is your email address?"),
             ("Thanks", "Thank you! Would you like to ask any questions now?")
         ]
+
 
         self.log_path = "interaction.docx"
 
@@ -264,6 +300,20 @@ class IntentRouter:
         print("purpose_classifier")
         messages = [
             {"role": "system", "content": AgentConfig.PURPOSE_CLASSIFIER_PROMPT},
+            {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
+        ]
+
+        try: 
+            self.llm1.temperature = 0.7
+            response = self.llm1.invoke(messages)
+            return response.content.strip()
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def serious_classifier(self, user_input, question):
+        print("serious_classifier")
+        messages = [
+            {"role": "system", "content": AgentConfig.SERIOUS_ClASSIFIER_PROMPT},
             {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
         ]
 
@@ -383,6 +433,7 @@ class IntentRouter:
 
             # Classify intent of reply to welcome message
             intent = self.classify_intent(input_text, AgentConfig.WELCOME_MESSAGE)
+            
 
             if intent == "denial":
                 explanation = await self.purpose_classifier(input_text, "May I ask you a few questions to better assist you?")
@@ -412,6 +463,14 @@ class IntentRouter:
                 current_question = dict(self.questions).get(current_key, "")
                 intent = self.classify_intent(input_text, current_question)
 
+                if intent == "impossible":
+                    explanation = await self.serious_classifier(input_text, current_question)
+                    return {
+                        "status": "impossible",
+                        "message": explanation + "\nCould you please reconsider the question?\n" + current_question,
+                        "session_id": session_id
+                    }
+
                 if intent == "answer" and current_key in ["name", "age", "address", "email"] :
                     answers[current_key] = input_text
                     state["answers"] = answers
@@ -434,7 +493,7 @@ class IntentRouter:
                 if current_key == "address":
                     state["current_key"] = "Confirm address"
                     self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("Confirm address", "")
+                    next_question = dict(self.questions).get(current_key, "")
                     return {
                         "status": "Permanent_address",
                         "message": next_question,
@@ -473,16 +532,6 @@ class IntentRouter:
                         "session_id": session_id
                     }
 
-                '''if intent == "Different address":
-                    state["current_key"] = "Permanent address"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("Permanent address", "")
-                    return {
-                        "status": "correct address",
-                        "message": next_question,
-                        "session_id": session_id
-                    }'''
-
                 if current_key == "covid" and intent == "acceptance":
                     state["current_key"] = "Year"
                     self.session_manager.update_state(session_id, state)
@@ -513,7 +562,17 @@ class IntentRouter:
                         "session_id": session_id
                     }
 
-                if current_key == "covid" and intent == "denial":
+                if current_key == "vaccinated" and intent == "no vaccine":
+                    state["current_key"] = "email"
+                    self.session_manager.update_state(session_id, state)
+                    next_question = dict(self.questions).get("email", "")
+                    return {
+                        "status": "Covid positive",
+                        "message": next_question,
+                        "session_id": session_id
+                    }
+
+                if current_key == "covid" and intent == "no covid":
                     state["current_key"] = "No covid"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("No covid", "")
