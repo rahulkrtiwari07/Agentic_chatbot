@@ -141,25 +141,14 @@ class AgentConfig:
     - "No"
     - "No This is not my permanent address"
     - "This is the address where I live and not my permanent address."
-    - "This is not the address mentioned on my government ID"
+    - "This is not the address mentioned on my government ID"     
 
-    8. **impossible** - If the input provided by the user are redundant or not satisfactor in comparison to the question.
-    Examples:
-    - question : "Can you please state your full name"
-      answer : "xyz" or "123"
-
-    - question : "What is your age?"
-      answer : "1000" or "120"  (Age shaould be between 13-105)
-
-    - question : "Can you please state your full address?"
-      answer : "Mars", "Sun", "Moon" etc.      
-
-    9. **no vaccine** -  If the user replied negatively when asked whether he was vaccinated at that time.
+    8. **no vaccine** -  If the user replied negatively when asked whether he was vaccinated at that time.
     Examples:
     - "No"
     - "No I wasn't vaccinated at that time"
 
-    10. **no covid** - When the user is asked "Have you have covid in the past 5 years" and he replies in follwing way.
+    9. **no covid** - When the user is asked "Have you have covid in the past 5 years" and he replies in follwing way.
     Example:
     - "No"
     - "No I didn't had covid"
@@ -202,6 +191,39 @@ class AgentConfig:
     is for government record and that proper data enhances governance.
     """
 
+    ANSWER_PROMPT = """
+        You are a judgment assistant. Your task is to determine whether the input provided by the user is satisfactory or not.
+
+        Context:
+        - The user was asked the following question:
+        "{question}"
+        - The user responded with:
+        "{user_input}"
+
+        Criteria for judging the response:
+
+        1. If the question is: "Can you please state your full name?"
+        - Responses like "123", "xyz", or anything that clearly cannot be interpreted as a real human name are **not satisfactory**.
+
+        2. If the question is: "What is your age?"
+        - The age must be a numeric value between **13 and 105** (inclusive). Any value outside this range is **not satisfactory**.
+
+        3. If the question is: "Can you please provide your address?"
+        - The address should refer to a real, habitable location. Answers like "sun", "Mars", or any imaginary or uninhabitable places are **not satisfactory**.
+
+        4. If the question is: "What is your email address?"
+        - The email address should be valid and should end with a domain like **@gmail.com**, **@yahoo.com**, **@outlook.com**, etc. Random strings or missing domains are **not satisfactory**.
+
+        Instructions:
+        - If the user input is satisfactory, return **"satisfactory"**.
+        - If the user input is not satisfactory, return a friendly message encouraging the user to be serious and provide a proper answer according to the question.
+
+        Respond ONLY in the following JSON format:
+            {
+            "intent": "satisfactory" | {freindly message}
+            }
+            
+        """
 
 class IntentRouter:
     def __init__(self):
@@ -281,6 +303,22 @@ class IntentRouter:
     def classify_intent(self, user_input, question=None):
         messages = [
             {"role": "system", "content": AgentConfig.INTENT_CLASSIFIER_PROMPT},
+            {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
+        ]
+
+        try:
+            result = self.llm1.invoke(messages)
+            print("[DEBUG] Intent classification raw output:", result.content)
+            intent = json.loads(result.content).get("intent", "unknown")
+        except Exception as e:
+            logging.warning(f"Intent classification error: {e}")
+            intent = "unknown"
+
+        return intent
+    
+    def classify_answer(self, user_input, question=None):
+        messages = [
+            {"role": "system", "content": AgentConfig.ANSWER_PROMPT },
             {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
         ]
 
@@ -463,32 +501,41 @@ class IntentRouter:
                 current_question = dict(self.questions).get(current_key, "")
                 intent = self.classify_intent(input_text, current_question)
 
-                if intent == "impossible":
+                '''if intent == "impossible":
                     explanation = await self.serious_classifier(input_text, current_question)
                     return {
                         "status": "impossible",
                         "message": explanation + "\nCould you please reconsider the question?\n" + current_question,
                         "session_id": session_id
-                    }
+                    }'''
 
                 if intent == "answer" and current_key in ["name", "age", "address", "email"] :
-                    answers[current_key] = input_text
-                    state["answers"] = answers
-                    self.session_manager.update_state(session_id, state)
-
-                    if current_key == "email":
-                        state["current_key"] = "Thanks"
+                    intent1 = self.classify_answer(input_text, current_question)
+                    print(intent1)
+                    if intent1 == "satisfactory":
+                        answers[current_key] = input_text
+                        state["answers"] = answers
                         self.session_manager.update_state(session_id, state)
-                        next_question = dict(self.questions).get("Thanks", "")
-                        return {
-                            "status": "ready_for_questions",
-                            "message": next_question,
-                            "session_id": session_id
-                        }
 
-                    response = await self.interact(state)
-                    response["session_id"] = session_id
-                    return response
+                        if current_key == "email":
+                            state["current_key"] = "Thanks"
+                            self.session_manager.update_state(session_id, state)
+                            next_question = dict(self.questions).get("Thanks", "")
+                            return {
+                                "status": "ready_for_questions",
+                                "message": next_question,
+                                "session_id": session_id
+                            }
+
+                        response = await self.interact(state)
+                        response["session_id"] = session_id
+                        return response
+                    else :
+                        return {
+                                "status": "ready_for_questions",
+                                "message": intent1,
+                                "session_id": session_id
+                            }
 
                 if current_key == "address":
                     state["current_key"] = "Confirm address"
@@ -498,9 +545,7 @@ class IntentRouter:
                         "status": "Permanent_address",
                         "message": next_question,
                         "session_id": session_id
-                    }
-
-                    
+                    } 
 
                 if current_key == "Confirm address" and intent == "acceptance":
                     state["current_key"] = "covid"
