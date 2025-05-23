@@ -81,7 +81,7 @@ class AgentConfig:
 
     Possible intent categories:
 
-    1. An **answer** to a personal information question (like name, age, address or email).
+    1. An **answer** to a question asked by us(like name, age, address or email).
     Examples of answers:
     - "Rahul"
     - "25"
@@ -110,7 +110,8 @@ class AgentConfig:
     - "None of your business"
 
     4. **acceptance** - The user agrees to provide information to the questions when the user is welcomed and asked whether he is comfortable sharing his personal information or 
-    when the user is asked whether the address provided by him is his permanent address and he replies positively or when the user is asked whether he has covid in the last five years and he replies positively.
+    when the user is asked whether the address provided by him is his permanent address and he replies positively or when the user is asked whether he have covid in the last five years and he replies positively or
+    When the user is asked were you vaccinated at that time and he replies positively.
     Examples:
     - "Hii"
     - "Hello"
@@ -120,8 +121,6 @@ class AgentConfig:
     - "Ask the question and then i will decide whether i want to answer or not"
     - "Yes"
     - "Yes this is my permanent address"
-
-    
 
     5. **repeat** - The user asks for the question to be repeated or clarified.
     Examples:
@@ -148,15 +147,29 @@ class AgentConfig:
     - "No"
     - "No I wasn't vaccinated at that time"
 
-    9. **no covid** - When the user is asked "Have you have covid in the past 5 years" and he replies in follwing way.
+    9. **no covid** - When the user is asked "Have you have covid in the past 5 years" and he replies negatively in follwing way.
     Example:
     - "No"
     - "No I didn't had covid"
 
+    9. **Clarification** - If the user asks for any clarification on the asked question.
 
+    Example:
+    1. “Could you please state your name”
+
+    - "Do you want my full name?"
+
+   
+
+    2. What is your age?
+
+    - "My age is different in the documents then the actual age"
+    
+
+    
     Respond ONLY in the following JSON format:
     {
-    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative" | "Different address | "no vaccine" | "no covid"
+    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative" | "Different address | "no vaccine" | "no covid" | "clarification"
     }
     """
 
@@ -203,27 +216,73 @@ class AgentConfig:
         Criteria for judging the response:
 
         1. If the question is: "Can you please state your full name?"
-        - Responses like "123", "xyz", or anything that clearly cannot be interpreted as a real human name are **not satisfactory**.
+        - Responses like "123", "xyz", or anything that clearly cannot be interpreted as a real human name are *not satisfactory*.
 
         2. If the question is: "What is your age?"
-        - The age must be a numeric value between **13 and 105** (inclusive). Any value outside this range is **not satisfactory**.
+        - The age must be between *13 and 105* (inclusive). Any value outside this range is *not satisfactory*.
 
         3. If the question is: "Can you please provide your address?"
-        - The address should refer to a real, habitable location. Answers like "sun", "Mars", or any imaginary or uninhabitable places are **not satisfactory**.
+        - The address should refer to a real, habitable location. Answers like "sun", "Mars", or any imaginary or uninhabitable places are *not satisfactory*.
 
         4. If the question is: "What is your email address?"
-        - The email address should be valid and should end with a domain like **@gmail.com**, **@yahoo.com**, **@outlook.com**, etc. Random strings or missing domains are **not satisfactory**.
+        - The email address should be valid and should end with a domain like *@gmail.com, *@yahoo.com*, *@outlook.com*, etc. Random strings or missing domains are **not satisfactory*.
 
         Instructions:
-        - If the user input is satisfactory, return **"satisfactory"**.
+        - If the user input is satisfactory, return *"satisfactory"*.
         - If the user input is not satisfactory, return a friendly message encouraging the user to be serious and provide a proper answer according to the question.
+
+    
+        
+        Instructions:
+        - If the user input is satisfactory, return *"satisfactory"*.
+        - If the user input is not satisfactory, generate a clarification based on the clarification mentioned above.
 
         Respond ONLY in the following JSON format:
             {
-            "intent": "satisfactory" | {freindly message}
+            "intent": "satisfactory" | { clarification }
             }
             
         """
+
+    CLARIFICATION_PROMPT = """
+    You are a clarification assistant. Your task is to clarify to the user when he pose any query on the questions asked to him.
+
+    Context:
+        - The user was asked the following question:
+        "{question}"
+        - The user responded with:
+        "{user_input}"
+
+    Example:
+    1. question : “Could you please state your name”
+
+   Clarification: 
+    A full name consists of First Name, Middle name and last name.
+    The name should be the same as the Aadhar card 
+
+
+    2. What is your age?
+
+    Clarification: 
+    Age is in years.
+    The Age should be as per Aadhar card
+
+
+    3. “Could you please tell me your current home address?”
+
+     Clarification: 
+    The address we need is for the current place of residence, and not the place of birth, or parents home.
+    Current place of residence can be different from the address listed in the Aadhar card.
+
+    On the basis of the above clarification form a suitable clarification to return to the user and also repeat the question at the end of the clarification.
+
+    Respond ONLY in the following JSON format:
+            {
+            "intent": { clarification }
+            }
+
+
+    """
 
 class IntentRouter:
     def __init__(self):
@@ -319,6 +378,22 @@ class IntentRouter:
     def classify_answer(self, user_input, question=None):
         messages = [
             {"role": "system", "content": AgentConfig.ANSWER_PROMPT },
+            {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
+        ]
+
+        try:
+            result = self.llm1.invoke(messages)
+            print("[DEBUG] Intent classification raw output:", result.content)
+            intent = json.loads(result.content).get("intent", "unknown")
+        except Exception as e:
+            logging.warning(f"Intent classification error: {e}")
+            intent = "unknown"
+
+        return intent
+
+    def clarification(self, user_input, question=None):
+        messages = [
+            {"role": "system", "content": AgentConfig.CLARIFICATION_PROMPT },
             {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
         ]
 
@@ -508,6 +583,13 @@ class IntentRouter:
                         "message": explanation + "\nCould you please reconsider the question?\n" + current_question,
                         "session_id": session_id
                     }'''
+                if intent == "clarification":
+                    clarification = self.clarification(input_text, current_question)
+                    return {
+                                "status": "clarification",
+                                "message": clarification + "Please answer the question accordingly \n" + current_question,
+                                "session_id": session_id
+                            }
 
                 if intent == "answer" and current_key in ["name", "age", "address", "email"] :
                     intent1 = self.classify_answer(input_text, current_question)
