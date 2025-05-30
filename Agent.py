@@ -7,7 +7,8 @@ from langgraph.graph import StateGraph
 from langchain_community.chat_models import ChatOpenAI
 from langchain_openai import AzureChatOpenAI
 from langchain_core.callbacks import StreamingStdOutCallbackHandler
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
+from Prompts import AgentConfig
 
 from stream import Retrieval  # Make sure this exists and is implemented
 
@@ -31,258 +32,6 @@ class SessionManager:
     def has_session(self, session_id):
         return session_id in self.sessions
 
-
-class AgentConfig:
-    """Configuration settings for the agent decision system."""
-    
-    # Decision model
-    DECISION_MODEL = "gpt-35-turbo"  # or whichever model you prefer
-    
-    # Vision model for image analysis
-    VISION_MODEL = "gpt-35-turbo"
-    # Confidence threshold for responses
-    CONFIDENCE_THRESHOLD = 0.85
-
-    WELCOME_MESSAGE = "Hello! My name is Luna. I am calling on behalf of Microware. May I ask you a few questions?"
-    
-    # System instructions for the decision agent
-    DECISION_SYSTEM_PROMPT = """You are an intelligent triage system that routes user queries to 
-    the appropriate specialized agent. Your job is to analyze the user's request and determine which agent 
-    is best suited to handle it based on the query content, presence of images, and conversation context.
-
-    Available agents:
-    1. CONVERSATION_AGENT - For general chat, greetings, and any questions **not** falling into the other categories, including general questions about India and its districts that are not related to health or population.
-    2. RAG_AGENT - For specific knowledge about **population dynamics and health indicators in India and its districts**, including:
-   - Fertility
-   - Infant and child mortality
-   - Family planning practices
-   - Maternal and child health
-   - Reproductive health
-   - Nutrition
-   - Emerging health and family welfare issues 
-
-    You must provide your answer in JSON format with the following structure:
-    {{
-    "agent": "AGENT_NAME",
-    "reasoning": "Your step-by-step reasoning for selecting this agent",
-    "confidence": 0.95  // Value between 0.0 and 1.0 indicating your confidence in this decision
-    }}
-    """
-
-    INTENT_CLASSIFIER_PROMPT = """You are an intent classification assistant.
-
-    Determine the user's intent based on the question they were asked and their response.
-
-    User was asked the following question:
-    "{question}"
-
-    User replied with:
-    "{user_input}"
-
-    Possible intent categories:
-
-    1. An **answer** to a question asked by us(like name, age, address or email).
-    Examples of answers:
-    - "Rahul"
-    - "25"
-    - "rahul@example.com"
-    - "My name is Priya"
-    - "I’m 30 years old"
-    - "I live in Ghaziabad district of Uttar Pradesh"
-    - "House number 04 Near post office district Nainital Uttarakhand"
-    - "Mumbai"
-    - "Delhi"
-
-    2. Or a **query** asking for general or medical information, or starting a new conversation.
-    Examples of queries:
-    - "Tell me about population growth"
-    - "What is the weather?"
-    - "Hi, how are you?"
-
-    “IMPORTANT: If the user was asked ‘Is this your permanent address?’ and replies ‘No’, the intent should be classified as ‘Different address’, not ‘denial’.”
-
-    3. **denial** — the user refuses to provide personal information or objects to question.
-    Examples:
-    - "I don't want to tell you that"
-    - "Why do you need my email?"
-    - "I prefer not to share my age"
-    - "That's personal"
-    - "None of your business"
-
-    4. **acceptance** - The user agrees to provide information to the questions when the user is welcomed and asked whether he is comfortable sharing his personal information or 
-    when the user is asked whether the address provided by him is his permanent address and he replies positively or when the user is asked whether he have covid in the last five years and he replies positively or
-    When the user is asked were you vaccinated at that time and he replies positively.
-    Examples:
-    - "Hii"
-    - "Hello"
-    - "Yes"
-    - "Yes i can give my information"
-    - "You can procedd further"
-    - "Ask the question and then i will decide whether i want to answer or not"
-    - "Yes"
-    - "Yes this is my permanent address"
-
-    5. **repeat** - The user asks for the question to be repeated or clarified.
-    Examples:
-    - "Can you please repeat the question"
-    - "Pardon"
-    - "I didn't get the question"
-
-    6. **negative** - If the user replies in negative for the question "Would you like to ask any questions now?""
-    Examples:
-    - "No"
-    - "No I don't want to"
-    - "No thanks"
-    - "No I am done"
-
-    7. **Different address** - If the user is asked "Is this your permanent address?") and he replies in following manner.
-    Examples:
-    - "No"
-    - "No This is not my permanent address"
-    - "This is the address where I live and not my permanent address."
-    - "This is not the address mentioned on my government ID"     
-
-    8. **no vaccine** -  If the user replied negatively when asked whether he was vaccinated at that time.
-    Examples:
-    - "No"
-    - "No I wasn't vaccinated at that time"
-
-    9. **no covid** - When the user is asked "Have you have covid in the past 5 years" and he replies negatively in follwing way.
-    Example:
-    - "No"
-    - "No I didn't had covid"
-
-    9. **Clarification** - If the user asks for any clarification on the asked question.
-
-    Example:
-    1. “Could you please state your name”
-
-    - "Do you want my full name?"
-
-   
-
-    2. What is your age?
-
-    - "My age is different in the documents then the actual age"
-    
-
-    
-    Respond ONLY in the following JSON format:
-    {
-    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative" | "Different address | "no vaccine" | "no covid" | "clarification"
-    }
-    """
-
-    PURPOSE_CLASSIFIER_PROMPT = """
-    You are a purpose classification assistant.
-
-    Context:
-    - The user was asked the following question:
-    "{question}"
-    - The user responded with:
-    "{user_input}"
-
-    Instructions:
-    1. If the user objects to the question or refuses to provide information:
-    - Your sole role is to politely explain the **purpose of data collection**.
-    - Clarify that the information is collected to **store user data in a database** to support **better governance by the government**.
-
-    Be empathetic, informative, and clear in your response.
-    """
-
-    SERIOUS_ClASSIFIER_PROMPT = """
-    You are a purpose classifier assistant.
-    
-    Context:
-    - The user was asked the following question:
-    "{question}"
-    - The user responded with:
-    "{user_input}"
-
-    Instruction:
-    The user is not serious about providing the answers to the question or it seems that the input provided are not satisafactory so you need to make him understand that this data collection process
-    is for government record and that proper data enhances governance.
-    """
-
-    ANSWER_PROMPT = """
-        You are a judgment assistant. Your task is to determine whether the input provided by the user is satisfactory or not.
-
-        Context:
-        - The user was asked the following question:
-        "{question}"
-        - The user responded with:
-        "{user_input}"
-
-        Criteria for judging the response:
-
-        1. If the question is: "Can you please state your full name?"
-        - Responses like "123", "xyz", or anything that clearly cannot be interpreted as a real human name are *not satisfactory*.
-
-        2. If the question is: "What is your age?"
-        - The age must be between *13 and 105* (inclusive). Any value outside this range is *not satisfactory*.
-
-        3. If the question is: "Can you please provide your address?"
-        - The address should refer to a real, habitable location. Answers like "sun", "Mars", or any imaginary or uninhabitable places are *not satisfactory*.
-
-        4. If the question is: "What is your email address?"
-        - The email address should be valid and should end with a domain like *@gmail.com, *@yahoo.com*, *@outlook.com*, etc. Random strings or missing domains are **not satisfactory*.
-
-        Instructions:
-        - If the user input is satisfactory, return *"satisfactory"*.
-        - If the user input is not satisfactory, return a friendly message encouraging the user to be serious and provide a proper answer according to the question.
-
-    
-        
-        Instructions:
-        - If the user input is satisfactory, return *"satisfactory"*.
-        - If the user input is not satisfactory, generate a clarification based on the clarification mentioned above.
-
-        Respond ONLY in the following JSON format:
-            {
-            "intent": "satisfactory" | { clarification }
-            }
-            
-        """
-
-    CLARIFICATION_PROMPT = """
-    You are a clarification assistant. Your task is to clarify to the user when he pose any query on the questions asked to him.
-
-    Context:
-        - The user was asked the following question:
-        "{question}"
-        - The user responded with:
-        "{user_input}"
-
-    Example:
-    1. question : “Could you please state your name”
-
-   Clarification: 
-    A full name consists of First Name, Middle name and last name.
-    The name should be the same as the Aadhar card 
-
-
-    2. What is your age?
-
-    Clarification: 
-    Age is in years.
-    The Age should be as per Aadhar card
-
-
-    3. “Could you please tell me your current home address?”
-
-     Clarification: 
-    The address we need is for the current place of residence, and not the place of birth, or parents home.
-    Current place of residence can be different from the address listed in the Aadhar card.
-
-    On the basis of the above clarification form a suitable clarification to return to the user and also repeat the question at the end of the clarification.
-
-    Respond ONLY in the following JSON format:
-            {
-            "intent": { clarification }
-            }
-
-
-    """
 
 class IntentRouter:
     def __init__(self):
@@ -310,7 +59,7 @@ class IntentRouter:
             ("No covid", "Have you ever shown symptons of covid"),
             ("Vaccination before", "Have you ever been vaccinated for Covid?"),
             ("email", "What is your email address?"),
-            ("Thanks", "Thank you! Would you like to ask any questions now?")
+            ("Thanks", "Thank you! Feel free to ask if you have any questions.")
         ]
 
 
@@ -332,7 +81,7 @@ class IntentRouter:
             api_version="2023-06-01-preview",
             azure_endpoint=self.azure_endpoint,
             api_key=self.api_key,
-            temperature=0,
+            temperature=0.9,
             streaming=True,
             max_retries=2,
         )
@@ -359,9 +108,37 @@ class IntentRouter:
             }
         return {**state, **decision}
     
-    def classify_intent(self, user_input, question=None):
+    def format_chat_log(self, chat_log):
+        if not chat_log:
+            return ""
+        # If it's a dict (single message), format it accordingly
+        if isinstance(chat_log, dict):
+            # For example, if dict has keys 'role' and 'message' or 'content'
+            role = chat_log.get('role', 'unknown').capitalize()
+            content = chat_log.get('message') or chat_log.get('content') or ''
+            return f"{role}: {content}"
+        # If it's a list of dicts (a conversation history)
+        if isinstance(chat_log, list):
+            return "\n".join(
+                f"{entry.get('role', 'unknown').capitalize()}: {entry.get('message') or entry.get('content', '')}" 
+                for entry in chat_log
+            )
+        # Otherwise just convert to string
+        return str(chat_log)
+
+    
+    
+    def classify_intent(self, user_input, question=None, chat_log=None):
+
+        if chat_log is None:
+            formatted_log = ""
+        else:
+            formatted_log = self.format_chat_log(chat_log)
+
+        system_prompt = AgentConfig.INTENT_CLASSIFIER_PROMPT.replace("{chat_log}", formatted_log)
+
         messages = [
-            {"role": "system", "content": AgentConfig.INTENT_CLASSIFIER_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
         ]
 
@@ -374,6 +151,7 @@ class IntentRouter:
             intent = "unknown"
 
         return intent
+
     
     def classify_answer(self, user_input, question=None):
         messages = [
@@ -382,7 +160,7 @@ class IntentRouter:
         ]
 
         try:
-            result = self.llm1.invoke(messages)
+            result = self.llm2.invoke(messages)
             print("[DEBUG] Intent classification raw output:", result.content)
             intent = json.loads(result.content).get("intent", "unknown")
         except Exception as e:
@@ -398,7 +176,7 @@ class IntentRouter:
         ]
 
         try:
-            result = self.llm1.invoke(messages)
+            result = self.llm2.invoke(messages)
             print("[DEBUG] Intent classification raw output:", result.content)
             intent = json.loads(result.content).get("intent", "unknown")
         except Exception as e:
@@ -462,16 +240,27 @@ class IntentRouter:
     async def simple_llm(self, state):
         full_response = ""
         try:
+            logging.info("simple_llm started")
             print("simple_llm")
+            # Use a prompt from the state or default to a basic instruction
+            system_prompt = state.get("system_prompt", AgentConfig.QUERY_PROMPT)
+            user_input = state['input']
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_input)
+            ]
+
             async for chunk in self.llm2.astream(
-                [HumanMessage(content=state['input'])],
+                messages,
                 config={"configurable": {"session_id": state.get('email', 'default_session')}},
             ):
                 if hasattr(chunk, "content") and chunk.content:
                     full_response += chunk.content
                     yield {"response": full_response}
+                    
         except Exception as e:
-            logging.error(f"Error during streaming: {e}")
+            logging.exception("Error during streaming")
             yield {"response": f"Error processing response: {e}"}
 
     async def RAG(self, state):
@@ -574,15 +363,8 @@ class IntentRouter:
                 current_key = state.get("current_key")
                 print(current_key)
                 current_question = dict(self.questions).get(current_key, "")
-                intent = self.classify_intent(input_text, current_question)
+                intent = self.classify_intent(input_text, current_question, chat_log)
 
-                '''if intent == "impossible":
-                    explanation = await self.serious_classifier(input_text, current_question)
-                    return {
-                        "status": "impossible",
-                        "message": explanation + "\nCould you please reconsider the question?\n" + current_question,
-                        "session_id": session_id
-                    }'''
                 if intent == "clarification":
                     clarification = self.clarification(input_text, current_question)
                     return {
@@ -619,7 +401,7 @@ class IntentRouter:
                                 "session_id": session_id
                             }
 
-                if current_key == "address":
+                if current_key == "address" and intent=="answer":
                     state["current_key"] = "Confirm address"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get(current_key, "")
@@ -720,12 +502,11 @@ class IntentRouter:
                     }
 
 
-
                 if intent == "denial":
                     explanation = await self.purpose_classifier(input_text, current_question)
                     return {
                         "status": "denial",
-                        "message": explanation + "\nCould you please reconsider answering this question?",
+                        "message": explanation + "\nCould you please reconsider answering this question?\n" + current_question,
                         "session_id": session_id
                     }
 
@@ -742,6 +523,66 @@ class IntentRouter:
                         "message": "No problem. Feel free to return anytime. Goodbye!",
                         "session_id": session_id
                     }
+                
+                if current_key == "Thanks" and intent == "acceptance":
+                    state["current_key"] = "Query"
+                    return{
+                        "status": "Query",
+                        "message": "Please ask your questions",
+                        "session_id": session_id
+                    }
+                
+                if current_key == "Thanks" and intent == "query":
+                    state["current_key"] = "Query"
+                    email = answers.get("email", "default@example.com")
+                    self.session_manager.update_state(session_id, state)
+                    response_text = response.get("response", "")
+                    response = await self.graph.ainvoke({
+                        "input": input_text,
+                        "has_image": has_image,
+                        "email": email
+                    })
+                    response["session_id"] = session_id
+                    return {
+                        "status": "Queries",
+                        "message": response_text + "\n Any more questions?",
+                        "session_id": session_id
+                    }
+                
+                if current_key == "Query" and intent == "query":
+                    state["current_key"] = "Query"
+                    email = answers.get("email", "default@example.com")
+                    self.session_manager.update_state(session_id, state)
+                    response = await self.graph.ainvoke({
+                        "input": input_text,
+                        "has_image": has_image,
+                        "email": email
+                    })
+                    response_text = response.get("response", "")
+                    response["session_id"] = session_id
+                    return {
+                        "status": "Queries",
+                        "message": response_text + "\n Any more questions?",
+                        "session_id": session_id
+                    }
+
+                if current_key == "Query" and intent == "negative":
+                    return {
+                        "status": "ended",
+                        "message": "No problem. Feel free to return anytime. Goodbye!",
+                        "session_id": session_id
+                    }
+
+                if intent == "query":
+                    email = answers.get("email", "default@example.com")
+                    self.session_manager.update_state(session_id, state)
+                    response = await self.graph.ainvoke({
+                        "input": input_text,
+                        "has_image": has_image,
+                        "email": email
+                    })
+                    response["session_id"] = session_id
+                    return response
 
 
             # If no input provided, or couldn't interpret intent
@@ -769,22 +610,40 @@ class IntentRouter:
         }
 
 
+chat_log = {}
 
+
+def log_message(role: str, message: str, session_id: str):
+    if session_id not in chat_log:
+        chat_log[session_id] = []
+    chat_log[session_id].append({
+        "role": role,
+        "message": message
+    })
+
+def print_bot_message(message: str, session_id: str):
+    print(f"Bot: {message}")
+    log_message("bot", message, session_id)
+
+
+def save_chat_log(filepath="chat_log.json"):
+    with open(filepath, "w") as f:
+        json.dump(chat_log, f, indent=2)
+    print(f"[INFO] Chat log saved to {filepath}")
 
 
 async def chat_loop():
     router = IntentRouter()
     session_id = None
 
-    # Start the conversation with initial welcome message
+    # Start conversation
     response = await router.run(input_text=None, session_id=session_id)
     session_id = response.get("session_id", session_id)
 
-    # Show welcome or first question
     if response.get("status") == "welcome":
-        print(f"Bot: {response['message']}")
+        print_bot_message(response["message"], session_id)
     elif response.get("status") == "asking":
-        print(f"Bot: {response['question']}")
+        print_bot_message(response["question"], session_id)
 
     while True:
         try:
@@ -797,28 +656,29 @@ async def chat_loop():
             print("Exiting...")
             break
 
+        log_message("user", user_input, session_id)
+
         response = await router.run(user_input, session_id=session_id)
         session_id = response.get("session_id", session_id)
 
-        if response.get("status") == "welcome":
-            print(f"Bot: {response['message']}")
-        elif response.get("status") == "asking":
-            print(f"Bot: {response['question']}")
-        elif response.get("status") == "denial":
-            print(f"Bot: {response['message']}")
-        elif response.get("status") == "unclear_input":
-            print(f"Bot: {response['message']}")
-        elif response.get("status") == "ready_for_questions":
-            print(f"Bot: {response['message']}")
-        elif response.get("response"):
-            print(f"Bot: {response['response']}")
-        elif response.get("status") == "ended":
-            print("Thanks for your support")
+        status = response.get("status")
+        bot_message = ""
+
+        if status in {"welcome", "asking", "denial", "unclear_input", "ready_for_questions", "confirm_permanent_address"}:
+            bot_message = response.get("message") or response.get("question", "")
+            print_bot_message(bot_message, session_id)
+        elif status == "ended":
+            bot_message = "The session has ended. Thank you!"
+            print_bot_message(bot_message, session_id)
             break
-        elif response.get("status") == "confirm_permanent_address":
-            print(f"Bot: {response['message']}")
+        elif response.get("response"):
+            bot_message = response["response"]
+            print_bot_message(bot_message, session_id)
         else:
-            print(f"Bot: {response.get('message', 'Something went wrong.')}")
+            bot_message = response.get("message", "Something went wrong.")
+            print_bot_message(bot_message, session_id)
+
+    save_chat_log()
 
 if __name__ == "__main__":
     asyncio.run(chat_loop())
