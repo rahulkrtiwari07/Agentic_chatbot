@@ -50,7 +50,7 @@ class IntentRouter:
         self.questions = [
             ("name", "Could you please state your full name?"),
             ("age", "What is your age?"),
-            ("address", "Can you please provide your address?"),
+            ("address", "What is your address?"),
             ("Confirm address", "Is this your permanent address"),
             ("Permanent address", "Please let meknow your permanent address"),
             ("covid", "Have you have covid in the past 5 years?"),
@@ -344,7 +344,25 @@ class IntentRouter:
                     "message": explanation + "\nCould you please reconsider starting with a few questions?",
                     "session_id": session_id
                 }
-            elif intent in ("answer", "query", "acceptance"):
+            
+            if intent == "query":
+                email = answers.get("email", "default@example.com")
+                self.session_manager.update_state(session_id, state)
+                current_question = dict(self.questions).get("name", "")
+                response = await self.graph.ainvoke({
+                    "input": input_text,
+                    "has_image": has_image,
+                    "email": email
+                })
+                response_text = response.get("response", "")
+                response["session_id"] = session_id
+                return {
+                    "status": "Queries",
+                    "message": response_text + "\nCan we start with the survey now?\n",
+                    "session_id": session_id
+                }
+
+            if intent in ("answer", "acceptance"):
                 state["welcomed"] = True
                 self.session_manager.update_state(session_id, state)
                 response = await self.interact(state)
@@ -491,7 +509,7 @@ class IntentRouter:
                         "session_id": session_id
                     }
 
-                if current_key == "No covid":
+                if current_key == "No covid" and intent in ["acceptance", "answer", "denial", "no covid"]:
                     state["current_key"] = "email"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("email", "")
@@ -536,12 +554,13 @@ class IntentRouter:
                     state["current_key"] = "Query"
                     email = answers.get("email", "default@example.com")
                     self.session_manager.update_state(session_id, state)
-                    response_text = response.get("response", "")
                     response = await self.graph.ainvoke({
                         "input": input_text,
                         "has_image": has_image,
                         "email": email
                     })
+                    response_text = response.get("response", "")
+
                     response["session_id"] = session_id
                     return {
                         "status": "Queries",
@@ -573,7 +592,7 @@ class IntentRouter:
                         "session_id": session_id
                     }
 
-                if intent == "query":
+                elif intent == "query":
                     email = answers.get("email", "default@example.com")
                     self.session_manager.update_state(session_id, state)
                     response = await self.graph.ainvoke({
@@ -581,8 +600,13 @@ class IntentRouter:
                         "has_image": has_image,
                         "email": email
                     })
+                    response_text = response.get("response", "")
                     response["session_id"] = session_id
-                    return response
+                    return {
+                        "status": "Queries",
+                        "message": response_text + "\nCould you please reconsider answering this question?\n" + current_question,
+                        "session_id": session_id
+                    }
 
 
             # If no input provided, or couldn't interpret intent

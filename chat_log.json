@@ -1,16 +1,34 @@
 {
-  "a6822cfe-2ba2-4fc9-876e-6690fe0c2bf6": [
+  "d48c05a0-68c4-43f6-8642-a85e8a803bbf": [
     {
       "role": "bot",
       "message": "Welcome! Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     },
     {
       "role": "user",
-      "message": "hii"
+      "message": "What is this about?"
+    },
+    {
+      "role": "bot",
+      "message": "You are being called to conduct an informal HR assessment of Covid.\nCan we start with the survey now?\n"
+    },
+    {
+      "role": "user",
+      "message": "ok"
     },
     {
       "role": "bot",
       "message": "Could you please state your full name?"
+    },
+    {
+      "role": "user",
+      "message": "Rahul"
+    },
+    {
+      "role": "bot",
+      "message": {
+        "clarification": "Responses like 'Rahul' which provide only the first name are not satisfactory. Please state your full name."
+      }
     },
     {
       "role": "user",
@@ -26,7 +44,17 @@
     },
     {
       "role": "bot",
-      "message": "Can you please provide your address?"
+      "message": "What is your address?"
+    },
+    {
+      "role": "user",
+      "message": "delhi"
+    },
+    {
+      "role": "bot",
+      "message": {
+        "clarification": "The address provided is missing specific details like street name or house number. Can you please provide a more detailed address?"
+      }
     },
     {
       "role": "user",
@@ -62,7 +90,15 @@
     },
     {
       "role": "user",
-      "message": "No"
+      "message": "What are the symptoms of covid?"
+    },
+    {
+      "role": "bot",
+      "message": "Common symptoms of COVID-19 include:\n- Loss of taste or smell\n- Extreme tiredness (fatigue)\n- Digestive symptoms like upset stomach, vomiting, or diarrhea\n- Pain such as headaches, body aches, or muscle aches\n- Fever or chills\n- Cold-like symptoms such as congestion, runny nose, or sore throat\n\nSome people may have few or no symptoms, while others may experience worsening symptoms 7 to 14 days after onset.\nCould you please reconsider answering this question?\nHave you ever shown symptons of covid"
+    },
+    {
+      "role": "user",
+      "message": "I didn/t had any such symptoms"
     },
     {
       "role": "bot",
@@ -75,30 +111,6 @@
     {
       "role": "bot",
       "message": "Thank you! Feel free to ask if you have any questions."
-    },
-    {
-      "role": "user",
-      "message": "Yes"
-    },
-    {
-      "role": "bot",
-      "message": "Please ask your questions"
-    },
-    {
-      "role": "user",
-      "message": "What is this all about?"
-    },
-    {
-      "role": "bot",
-      "message": "You are being called to conduct an informal HR assessment of Covid.\n Any more questions?"
-    },
-    {
-      "role": "user",
-      "message": "Is my data safe?"
-    },
-    {
-      "role": "bot",
-      "message": "Yes, it is encrypted.\n Any more questions?"
     },
     {
       "role": "user",

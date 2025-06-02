@@ -63,6 +63,9 @@ class AgentConfig:
     - "Will my data be compromised?"
     - "What will you do with my data?"
     - "is my data safe?"
+    - "Which address do you need?"
+    - "Which one do you want?"
+    -"Do you want my aadhaar address?"
 
     “IMPORTANT: If the user was asked ‘Is this your permanent address?’ and replies ‘No’, the intent should be classified as ‘Different address’, not ‘denial’.”
 
@@ -87,7 +90,7 @@ class AgentConfig:
     - "Yes"
     - "Yes this is my permanent address"
 
-    5. **repeat** - The user asks for the question to be repeated.
+    5. **repeat** - The user wants the question to be repeated.
     Examples:
     - "Can you please repeat the question"
     - "Pardon"
@@ -100,7 +103,7 @@ class AgentConfig:
     - "No thanks"
     - "No I am done"
 
-    7. **Different address** - If the user is asked "Is this your permanent address?") and he replies in following manner.
+    7. **Different address** - If the user is asked "Is this your permanent address?" and he replies in following manner.
     Examples:
     - "No"
     - "No This is not my permanent address"
@@ -236,6 +239,7 @@ class AgentConfig:
         Clarification:
         We’re just asking if you were vaccinated at the time of your last Covid infection.
 
+
         Now, based on the user’s input, write a friendly clarification to help them give a better answer. End the clarification by repeating the original question.
 
         Only respond in this format:
@@ -275,4 +279,7 @@ class AgentConfig:
 
         Question: Is my data safe?
         Response: Yes, it is encrypted.
+
+        Question: "Which address do you need" or "I have multiple addresses which one do you need"
+        Response: "We required the address that is registered in your government Id."
         """
