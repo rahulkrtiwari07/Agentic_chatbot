@@ -1,16 +1,8 @@
 {
-  "d48c05a0-68c4-43f6-8642-a85e8a803bbf": [
+  "c7dfb6c1-1162-4360-92a1-a5d57a6f5909": [
     {
       "role": "bot",
       "message": "Welcome! Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
-    },
-    {
-      "role": "user",
-      "message": "What is this about?"
-    },
-    {
-      "role": "bot",
-      "message": "You are being called to conduct an informal HR assessment of Covid.\nCan we start with the survey now?\n"
     },
     {
       "role": "user",
@@ -19,16 +11,6 @@
     {
       "role": "bot",
       "message": "Could you please state your full name?"
-    },
-    {
-      "role": "user",
-      "message": "Rahul"
-    },
-    {
-      "role": "bot",
-      "message": {
-        "clarification": "Responses like 'Rahul' which provide only the first name are not satisfactory. Please state your full name."
-      }
     },
     {
       "role": "user",
@@ -45,16 +27,6 @@
     {
       "role": "bot",
       "message": "What is your address?"
-    },
-    {
-      "role": "user",
-      "message": "delhi"
-    },
-    {
-      "role": "bot",
-      "message": {
-        "clarification": "The address provided is missing specific details like street name or house number. Can you please provide a more detailed address?"
-      }
     },
     {
       "role": "user",
@@ -90,15 +62,7 @@
     },
     {
       "role": "user",
-      "message": "What are the symptoms of covid?"
-    },
-    {
-      "role": "bot",
-      "message": "Common symptoms of COVID-19 include:\n- Loss of taste or smell\n- Extreme tiredness (fatigue)\n- Digestive symptoms like upset stomach, vomiting, or diarrhea\n- Pain such as headaches, body aches, or muscle aches\n- Fever or chills\n- Cold-like symptoms such as congestion, runny nose, or sore throat\n\nSome people may have few or no symptoms, while others may experience worsening symptoms 7 to 14 days after onset.\nCould you please reconsider answering this question?\nHave you ever shown symptons of covid"
-    },
-    {
-      "role": "user",
-      "message": "I didn/t had any such symptoms"
+      "message": "Yes"
     },
     {
       "role": "bot",
@@ -114,7 +78,7 @@
     },
     {
       "role": "user",
-      "message": "No"
+      "message": "No questions"
     },
     {
       "role": "bot",

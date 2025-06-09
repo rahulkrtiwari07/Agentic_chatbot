@@ -30,101 +30,81 @@ class AgentConfig:
 
     INTENT_CLASSIFIER_PROMPT = """You are an intent classification assistant.
 
-    Determine the user's intent based on the question they were asked and their responses.
+    Determine the user's intent based on the question they were asked and their response.
 
+    You will follow a step-by-step reasoning process:
+    1. Analyze what question was asked.
+    2. Interpret the user's response.
+    3. Determine how the response relates to the question (e.g., is it an answer, a denial, a question, a confirmation, etc.)
+    4. Choose the correct intent label based on reasoning.
+
+    Conversation snippet:
     "{chat_log}"
 
     Possible intent categories:
 
-    1. An **answer** to a question asked by us(like name, age, address or email).
-    Examples of answers:
+    1. An *answer* — The user provides factual information (e.g., name, age, address, email).
+    Examples:
     - "Rahul"
-    - "25"
     - "25 years"
-    - "rahul@example.com"
     - "My name is Priya"
-    - "I’m 30 years old"
-    - "I live in Ghaziabad district of Uttar Pradesh"
-    - "House number 04 Near post office district Nainital Uttarakhand"
-    - "Mumbai"
-    - "Delhi"
+    - "I live in Ghaziabad"
 
-    2. Or a **query** asking for general or covid information, or starting a new conversation.
-    Examples of queries:
+    2. A *query* — The user asks about Covid, the purpose of the call, or begins a new conversation.
+    Examples:
     - "Tell me about covid"
-    - "What are the symptoms of Covid"
-    - "Hi, how are you?"
     - "What is this call for?"
-    - "How did you get my number?"
-    - "Whom are you calling on behalf of?"
-    - "What organization is this?"
-    - "Who are you?"
-    - "Why is this call needed?"
-    - "Will my data be compromised?"
-    - "What will you do with my data?"
-    - "is my data safe?"
-    - "Which address do you need?"
-    - "Which one do you want?"
-    -"Do you want my aadhaar address?"
+    - "Hi, how are you?"
 
-    “IMPORTANT: If the user was asked ‘Is this your permanent address?’ and replies ‘No’, the intent should be classified as ‘Different address’, not ‘denial’.”
-
-    3. **denial** — the user refuses to provide personal information.
+    3. *denial* — The user refuses to provide personal information.
     Examples:
-    - "I don't want to tell you that"
-    - "Why do you need my email?"
-    - "I prefer not to share my age"
-    - "That's personal"
-    - "None of your business"
+    - "I prefer not to share that"
+    - "Why do you need this?"
 
-    4. **acceptance** - The user agrees to provide information to the questions when the user is welcomed and asked whether he is comfortable sharing his personal information or 
-    when the user is asked whether the address provided by him is his permanent address and he replies positively or when the user is asked whether he have covid in the last five years and he replies positively or
-    When the user is asked were you vaccinated at that time and he replies positively.
+    4. *acceptance* — The user agrees to proceed, confirms permanent address, or affirms having Covid/vaccine in past.
     Examples:
-    - "Hii"
-    - "Hello"
     - "Yes"
-    - "Yes i can give my information"
-    - "You can procedd further"
-    - "Ask the question and then i will decide whether i want to answer or not"
-    - "Yes"
-    - "Yes this is my permanent address"
+    - "Yes, this is my permanent address"
+    - "I had Covid back in 2021"
 
-    5. **repeat** - The user wants the question to be repeated.
+    5. *repeat* — The user asks for the question to be repeated.
     Examples:
-    - "Can you please repeat the question"
-    - "Pardon"
-    - "I didn't get the question"
+    - "Pardon?"
+    - "Can you repeat that?"
 
-    6. **negative** - If the user replies in negative for the question "Would you like to ask any questions now?""
+    6. *negative* — The user declines to ask further questions when invited to.
     Examples:
     - "No"
-    - "No I don't want to"
-    - "No thanks"
-    - "No I am done"
+    - "No questions"
 
-    7. **Different address** - If the user is asked "Is this your permanent address?" and he replies in following manner.
+    7. *Different address* — If asked “Is this your permanent address?” and user replies with:
+    - "No"
+    - "This is not my permanent address"
+
+    8. *no vaccine* — If asked about vaccination and user replies negatively.
     Examples:
-    - "No"
-    - "No This is not my permanent address"
-    - "This is the address where I live and not my permanent address."
-    - "This is not the address mentioned on my government ID"     
+    - "No, I wasn’t vaccinated"
 
-    8. **no vaccine** -  If the user replied negatively when asked whether he was vaccinated at that time.
+    9. *no covid* — If asked about past Covid history and user replies negatively.
     Examples:
-    - "No"
-    - "No I wasn't vaccinated at that time"
+    - "No, I didn’t have Covid"
 
-    9. **no covid** - When the user is asked "Have you have covid in the past 5 years" and he replies negatively in follwing way.
-    Example:
-    - "No"
-    - "No I didn't had covid"
-    
+    IMPORTANT: If the user is asked “Is this your permanent address?” and replies “No”, the intent must be ‘Different address’, not ‘denial’.
+
+    ---
+
+    Now, follow this reasoning format step by step:
+
+    1. What was the question?
+    2. What was the user’s response?
+    3. Interpret the meaning of the response in context.
+    4. Decide which intent category this best fits.
+
     Respond ONLY in the following JSON format:
     {
-    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat"| "negative" | "Different address | "no vaccine" | "no covid" 
+    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat" | "negative" | "Different address" | "no vaccine" | "no covid"
     }
-    """
+"""
 
     PURPOSE_CLASSIFIER_PROMPT = """
     You are a purpose classification assistant.

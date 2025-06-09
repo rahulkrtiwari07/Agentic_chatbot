@@ -10,9 +10,21 @@ from langchain_core.callbacks import StreamingStdOutCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
 from Prompts import AgentConfig
 
+from mongooperations import get_mongo_client, store_user_data
+
 from stream import Retrieval  # Make sure this exists and is implemented
 
 from uuid import uuid4
+from dotenv import load_dotenv
+
+mongo_uri = os.getenv('MONGO_URL')
+database_name = "chat_db"
+collection_name = "user_data"
+
+mongo_client = get_mongo_client(mongo_uri)
+print(mongo_client)
+
+load_dotenv('.env.example')
 
 class SessionManager:
     def __init__(self):
@@ -399,6 +411,12 @@ class IntentRouter:
                         state["answers"] = answers
                         self.session_manager.update_state(session_id, state)
 
+                        chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                        store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+
                         if current_key == "email":
                             state["current_key"] = "Thanks"
                             self.session_manager.update_state(session_id, state)
@@ -423,6 +441,12 @@ class IntentRouter:
                     state["current_key"] = "Confirm address"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get(current_key, "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                    
                     return {
                         "status": "Permanent_address",
                         "message": next_question,
@@ -433,6 +457,11 @@ class IntentRouter:
                     state["current_key"] = "covid"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("covid", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "correct address",
                         "message": "Thanks for the clarification.\n" + next_question,
@@ -443,6 +472,11 @@ class IntentRouter:
                     state["current_key"] = "Permanent address"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("Permanent address", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "correct address",
                         "message": "Thanks for the clarification.\n" + next_question,
@@ -453,6 +487,11 @@ class IntentRouter:
                     state["current_key"] = "covid"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("covid", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "correct address",
                         "message": "Thanks for the clarification.\n" + next_question,
@@ -463,6 +502,11 @@ class IntentRouter:
                     state["current_key"] = "Year"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("Year", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid positive",
                         "message": next_question,
@@ -473,6 +517,11 @@ class IntentRouter:
                     state["current_key"] = "vaccinated"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("vaccinated", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid positive",
                         "message": next_question,
@@ -483,6 +532,11 @@ class IntentRouter:
                     state["current_key"] = "email"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("email", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid positive",
                         "message": next_question,
@@ -493,6 +547,11 @@ class IntentRouter:
                     state["current_key"] = "email"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("email", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid positive",
                         "message": next_question,
@@ -503,6 +562,11 @@ class IntentRouter:
                     state["current_key"] = "No covid"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("No covid", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid negative",
                         "message": next_question,
@@ -513,6 +577,11 @@ class IntentRouter:
                     state["current_key"] = "email"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("email", "")
+                    chat_entry = {
+                            "question": current_question,
+                            "answer": input_text
+                        }
+                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid negative",
                         "message": next_question,

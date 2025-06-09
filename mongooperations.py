@@ -8,78 +8,106 @@ def get_mongo_client(uri):
     """Get a MongoDB client."""
     return pymongo.MongoClient(uri)
 
-def store_user_data(client, db_name, collection_name, email, chat_history):
-    """Stores user data (email address, datetime, and chat history) in MongoDB."""
+from datetime import datetime
+import pymongo
+
+def store_user_data(client, db_name, collection_name, session_id, chat_entry):
+    """
+    Stores a chat entry in MongoDB under the given session_id.
+    If the document exists, appends to 'chat_history'; otherwise creates a new document.
+    Each chat entry includes question, answer, and timestamp.
+    """
     try:
         db = client[db_name]
         collection = db[collection_name]
 
-        chat_document = collection.find_one({"email": email})
+        # Add timestamp to the chat entry
+        chat_entry["timestamp"] = datetime.utcnow()
+
+        chat_document = collection.find_one({"session_id": session_id})
 
         if chat_document:
             collection.update_one(
-                {"_id": chat_document["_id"]}, {"$push": {"chat_history": chat_history}}
+                {"_id": chat_document["_id"]},
+                {"$push": {"chat_history": chat_entry}}
             )
         else:
-            new_document = {"email": email, "chat_history": [chat_history]}
+            new_document = {
+                "session_id": session_id,
+                "chat_history": [chat_entry]
+            }
             collection.insert_one(new_document)
 
-        print(f"Message stored for chat: {email}")
-        print(chat_document)
-    except (pymongo.errors.ServerSelectionTimeoutError, pymongo.errors.NetworkTimeout, pymongo.errors.ConnectionFailure) as e:
+        print(f"Chat entry stored for session: {session_id}")
+        print(chat_entry)
+
+    except (pymongo.errors.ServerSelectionTimeoutError,
+            pymongo.errors.NetworkTimeout,
+            pymongo.errors.ConnectionFailure) as e:
         print(f"Error connecting to MongoDB: {e}")
 
-def retrieve_user_data(client, db_name, collection_name, email, date=None):
-    """Retrieves user data based on email address and date."""
+
+from datetime import datetime
+import pymongo
+
+def retrieve_user_data(client, db_name, collection_name, session_id, date=None):
+    """
+    Retrieves user data based on session_id and optional date.
+    If session_id is 'admin_login', retrieves all chat logs.
+    """
     try:
         db = client[db_name]
         collection = db[collection_name]
 
-        if email == "admin_login":
-            # If email is "admin_login", return all documents
-            pipeline = [
-                {"$project": {"_id": 0, "email": 1, "chat_history": 1}}  # Project only email and chat_history
-            ]
-            chat_history = []
-            for doc in collection.find():
+        chat_history = []
+
+        if session_id == "admin_login":
+            # Admin fetch: return all session documents with chat history
+            for doc in collection.find({}, {"_id": 0, "session_id": 1, "chat_history": 1}):
                 chat_history.append(doc)
             return chat_history
 
         else:
-            # Otherwise, filter by email and date as before
-            if date == None:
-                pipeline = [
-                    {"$match": {"email": email}},  # Filter documents by email ID
-                    {"$unwind": "$chat_history"},  # Unwind the chat_history array
-                    {"$project": {"_id": 0, "date": "$chat_history.date", "Question": "$chat_history.question", "Response": "$chat_history.response"}}
-                ]
-                chat_history = []
-                for doc in collection.aggregate(pipeline):
-                    chat_history.append(doc)
-                return chat_history
+            match_stage = {"$match": {"session_id": session_id}}
+            unwind_stage = {"$unwind": "$chat_history"}
+            project_stage = {
+                "$project": {
+                    "_id": 0,
+                    "timestamp": "$chat_history.timestamp",
+                    "question": "$chat_history.question",
+                    "answer": "$chat_history.answer"
+                }
+            }
 
-            else:
-                pipeline = [
-                    {"$match": {"email": email}},  # Filter documents by email ID
-                    {"$unwind": "$chat_history"},  # Unwind the chat_history array
-                    {"$project": {"_id": 0, "date": "$chat_history.date", "Question": "$chat_history.question", "Response": "$chat_history.response"}}
-                ]
+            pipeline = [match_stage, unwind_stage, project_stage]
 
-                # Filter by date
-                datetime_obj = datetime.strptime(date, "%d-%m-%Y")
-                pipeline.append({"$match": {"date": date}})
+            if date:
+                # Convert date string (DD-MM-YYYY) to datetime range for the entire day
+                target_date = datetime.strptime(date, "%d-%m-%Y")
+                next_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
-                chat_history = []
-                for doc in collection.aggregate(pipeline):
-                    chat_history.append(doc)
+                date_filter = {
+                    "$match": {
+                        "timestamp": {
+                            "$gte": target_date,
+                            "$lt": next_day
+                        }
+                    }
+                }
+                pipeline.append(date_filter)
 
-                return chat_history
+            for doc in collection.aggregate(pipeline):
+                chat_history.append(doc)
+
+            return chat_history
 
     except pymongo.errors.ConfigurationError as e:
-        print(f"Error connecting to MongoDB: {e}")
+        print(f"MongoDB Configuration Error: {e}")
+    except (pymongo.errors.ServerSelectionTimeoutError,
+            pymongo.errors.NetworkTimeout,
+            pymongo.errors.ConnectionFailure) as e:
+        print(f"MongoDB Connection Error: {e}")
 
-    except (pymongo.errors.ServerSelectionTimeoutError, pymongo.errors.NetworkTimeout, pymongo.errors.ConnectionFailure) as e:
-        print(f"Error connecting to MongoDB: {e}")
 
 def archive_data(client, db_name, source_collection_name, target_collection_name, days_threshold=30):
     """Transfers data from source collection to target collection if it's older than the threshold."""
