@@ -1,12 +1,12 @@
 {
-  "c7dfb6c1-1162-4360-92a1-a5d57a6f5909": [
+  "cfa666bd-ff29-4c78-b5af-cc98002fc799": [
     {
       "role": "bot",
       "message": "Welcome! Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     },
     {
       "role": "user",
-      "message": "ok"
+      "message": "Ok"
     },
     {
       "role": "bot",
@@ -14,75 +14,21 @@
     },
     {
       "role": "user",
-      "message": "Rahul Tiwari"
+      "message": "What is this all about?"
     },
     {
       "role": "bot",
-      "message": "What is your age?"
+      "message": "You are being called to conduct an informal HR assessment of Covid.\nCould you please reconsider answering this question?\nCould you please state your full name?"
     },
     {
       "role": "user",
-      "message": "29 years"
+      "message": "Rahul"
     },
     {
       "role": "bot",
-      "message": "What is your address?"
-    },
-    {
-      "role": "user",
-      "message": "Delhi"
-    },
-    {
-      "role": "bot",
-      "message": "Is this your permanent address"
-    },
-    {
-      "role": "user",
-      "message": "No"
-    },
-    {
-      "role": "bot",
-      "message": "Thanks for the clarification.\nPlease let meknow your permanent address"
-    },
-    {
-      "role": "user",
-      "message": "Mumbai"
-    },
-    {
-      "role": "bot",
-      "message": "Thanks for the clarification.\nHave you have covid in the past 5 years?"
-    },
-    {
-      "role": "user",
-      "message": "No"
-    },
-    {
-      "role": "bot",
-      "message": "Have you ever shown symptons of covid"
-    },
-    {
-      "role": "user",
-      "message": "Yes"
-    },
-    {
-      "role": "bot",
-      "message": "What is your email address?"
-    },
-    {
-      "role": "user",
-      "message": "rahul@gmail.com"
-    },
-    {
-      "role": "bot",
-      "message": "Thank you! Feel free to ask if you have any questions."
-    },
-    {
-      "role": "user",
-      "message": "No questions"
-    },
-    {
-      "role": "bot",
-      "message": "The session has ended. Thank you!"
+      "message": {
+        "clarification": "It seems like you have provided only your first name. Please provide your full name."
+      }
     }
   ]
 }

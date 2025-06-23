@@ -19,6 +19,7 @@ class AgentConfig:
     Available agents:
     1. CONVERSATION_AGENT - For greetings, and any questions **not** falling into the other categories.
     2. RAG_AGENT - For specific knowledge about covid.
+    3. MONGO_QUERY - For questions related to users personal information.
 
     You must provide your answer in JSON format with the following structure:
     {{
@@ -263,3 +264,40 @@ class AgentConfig:
         Question: "Which address do you need" or "I have multiple addresses which one do you need"
         Response: "We required the address that is registered in your government Id."
         """
+    
+    INFORMATION_EXTRACT_PROMPT = """
+    You are an assistant tasked with extracting only the relevant information from a user's chat history.
+
+    Given the following chat_history:
+    "{chat_history}"
+
+    Your goal is to extract meaningful, structured information from the answers — such as name, age, address, health status, etc. — and return a concise version of the chat_history that includes **only the essential questions and their relevant answers**.
+    Just extract the information from the answer and the question should be returned as it is.
+    Format"""
+
+    MONGO_PROMPT = """
+        Given the following MongoDB collection schema:
+
+        Collection: user_data
+
+        Each document has:
+        {
+        "session_id": "string",
+        "chat_history": [
+            {
+            "chat_history": [
+                {"question": "What is your address?", "answer": "Delhi"},
+                {"question": "What is your age?", "answer": "29 years"},
+                {"question": "What is your email address?", "answer": "rahul@gmail.com"},
+                ...
+            ]
+            }
+        ]
+        }
+
+        Convert the following natural language query into a MongoDB query:
+
+        "Show me all users from Delhi who registered after January 1, 2024"
+
+        MongoDB query:
+"""

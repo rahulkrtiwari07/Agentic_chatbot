@@ -22,7 +22,7 @@ def store_user_data(client, db_name, collection_name, session_id, chat_entry):
         collection = db[collection_name]
 
         # Add timestamp to the chat entry
-        chat_entry["timestamp"] = datetime.utcnow()
+        #chat_entry["timestamp"] = datetime.utcnow()
 
         chat_document = collection.find_one({"session_id": session_id})
 
@@ -39,7 +39,7 @@ def store_user_data(client, db_name, collection_name, session_id, chat_entry):
             collection.insert_one(new_document)
 
         print(f"Chat entry stored for session: {session_id}")
-        print(chat_entry)
+        #print(chat_entry)
 
     except (pymongo.errors.ServerSelectionTimeoutError,
             pymongo.errors.NetworkTimeout,

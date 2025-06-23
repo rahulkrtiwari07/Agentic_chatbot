@@ -2,6 +2,10 @@ import os
 import logging
 import asyncio
 import json
+import time
+
+import re
+import ast
 
 from langgraph.graph import StateGraph
 from langchain_community.chat_models import ChatOpenAI
@@ -11,15 +15,19 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from Prompts import AgentConfig
 
 from mongooperations import get_mongo_client, store_user_data
+from extract_mongo import retrieve_data
 
 from stream import Retrieval  # Make sure this exists and is implemented
 
 from uuid import uuid4
 from dotenv import load_dotenv
 
+from fastapi.responses import StreamingResponse
+
 mongo_uri = os.getenv('MONGO_URL')
 database_name = "chat_db"
 collection_name = "user_data"
+collection_name_1 = "user_data_1"
 
 mongo_client = get_mongo_client(mongo_uri)
 print(mongo_client)
@@ -155,7 +163,12 @@ class IntentRouter:
         ]
 
         try:
+            start_time = time.time()  # Record start time
             result = self.llm1.invoke(messages)
+            end_time = time.time()    # Record end time
+            time_taken = end_time - start_time
+
+            print(time_taken)
             print("[DEBUG] Intent classification raw output:", result.content)
             intent = json.loads(result.content).get("intent", "unknown")
         except Exception as e:
@@ -196,8 +209,28 @@ class IntentRouter:
             intent = "unknown"
 
         return intent
-
     
+    def information_extract(self, chat_history):
+        messages = [
+            {"role": "system", "content": AgentConfig.INFORMATION_EXTRACT_PROMPT.format(chat_history=chat_history)}
+        ]
+
+        try:
+            result = self.llm1.invoke(messages)
+            print("[DEBUG] Extracted information raw output:", result.content)
+
+            # Try parsing if output is expected to be JSON
+            try:
+                extracted_info = json.loads(result.content)
+            except json.JSONDecodeError:
+                extracted_info = result.content  # fallback to raw text if not JSON
+
+            return extracted_info
+
+        except Exception as e:
+            logging.warning(f"Information extraction error: {e}")
+            return {}
+
 
     async def purpose_classifier(self, user_input, question):
         print("purpose_classifier")
@@ -290,6 +323,41 @@ class IntentRouter:
         yield {"response": final_response}
 
 
+    async def mongo_query(self, state):
+        query = state.get('input')
+        if not query:
+            raise ValueError("query not provided in the state")
+
+        print("DEBUG STATE in mongo_query:", state)
+
+        # Get the MongoDB query string from the LLM
+        llm_response = await self.llm1.ainvoke(AgentConfig.MONGO_PROMPT)
+        mongo_query_str = llm_response.content.strip()  # ✅ extract the string
+
+        print("MongoDB query generated:")
+        print(mongo_query_str)
+
+        # ✅ Extract query inside db.collection.find(...)
+        match = re.search(r"find\((.*)\)", mongo_query_str, re.DOTALL)
+        if not match:
+            raise ValueError("Could not extract MongoDB query from LLM response")
+
+        raw_query = match.group(1)
+        print(raw_query)
+        try:
+            # ✅ Use ast.literal_eval for safety
+            query_dict = ast.literal_eval(raw_query)
+        except Exception as e:
+            raise ValueError(f"Failed to parse MongoDB query from LLM: {e}")
+
+        db = self.mongo_client[database_name]
+        collection = db[collection_name]
+        result = await collection.find(query_dict).to_list(length=100)
+
+        return result
+
+
+
     def unknown_intent_handler(self, state):
         print("Handling unknown intent...")
         return {"response": "Sorry, I didn't understand that request."}
@@ -301,6 +369,7 @@ class IntentRouter:
         builder.add_node("route_agent", self.route_agent)
         builder.add_node("simple_llm", self.simple_llm)
         builder.add_node("RAG", self.RAG)
+        builder.add_node("mongo_query", self.mongo_query)
         builder.add_node("unknown_intent_handler", self.unknown_intent_handler)
         builder.add_node("purpose_classifier", self.purpose_classifier)
 
@@ -314,6 +383,7 @@ class IntentRouter:
         builder.add_conditional_edges("route_agent", agent_selector, {
             "CONVERSATION_AGENT": "simple_llm",
             "RAG_AGENT": "RAG",
+            "MONGO_QUERY": "mongo_query",
             "WEB_SEARCH_PROCESSOR_AGENT": "RAG",  # Or a separate web agent if available
             "low_confidence_fallback_agent": "unknown_intent_handler",
             "parse_error_fallback_agent": "unknown_intent_handler",
@@ -335,6 +405,8 @@ class IntentRouter:
         state = self.session_manager.get_state(session_id)
         answers = state.get("answers", {})
         state["answers"] = answers
+
+        state["session_id"] = session_id
 
         # Handle initial welcome interaction
         if not state.get("welcomed", False):
@@ -605,11 +677,32 @@ class IntentRouter:
                     }
 
                 if current_key == "Thanks" and intent == "negative":
+                    data = retrieve_data(mongo_client, database_name, session_id)
+
+                    # Safely extract chat_history
+                    try:
+                        chat = data['user_data'][0]['chat_history']
+                    except (KeyError, IndexError) as e:
+                        logging.warning(f"Failed to retrieve chat_history: {e}")
+                        chat = []
+
+                    # Proceed only if chat is not empty
+                    if chat:
+                        extract = self.information_extract(chat)
+                        #print(extract)
+                    else:
+                        print("No chat history found for this session.")
+
+                    chat_entry = {"chat_history": extract
+                            } 
+                    store_user_data(mongo_client, database_name, collection_name_1, session_id, chat_entry)
+
                     return {
                         "status": "ended",
                         "message": "No problem. Feel free to return anytime. Goodbye!",
                         "session_id": session_id
                     }
+
                 
                 if current_key == "Thanks" and intent == "acceptance":
                     state["current_key"] = "Query"
@@ -667,7 +760,8 @@ class IntentRouter:
                     response = await self.graph.ainvoke({
                         "input": input_text,
                         "has_image": has_image,
-                        "email": email
+                        "email": email, 
+                        "session_id": session_id
                     })
                     response_text = response.get("response", "")
                     response["session_id"] = session_id
@@ -676,6 +770,7 @@ class IntentRouter:
                         "message": response_text + "\nCould you please reconsider answering this question?\n" + current_question,
                         "session_id": session_id
                     }
+
 
 
             # If no input provided, or couldn't interpret intent
