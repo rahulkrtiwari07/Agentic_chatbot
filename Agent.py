@@ -323,6 +323,8 @@ class IntentRouter:
         yield {"response": final_response}
 
 
+    import json
+
     async def mongo_query(self, state):
         query = state.get('input')
         if not query:
@@ -330,31 +332,46 @@ class IntentRouter:
 
         print("DEBUG STATE in mongo_query:", state)
 
-        # Get the MongoDB query string from the LLM
-        llm_response = await self.llm1.ainvoke(AgentConfig.MONGO_PROMPT)
-        mongo_query_str = llm_response.content.strip()  # ✅ extract the string
+        # Inject user query into the MONGO_PROMPT
+        prompt = AgentConfig.MONGO_PROMPT.replace("{user_query}", query)
+
+        # Get LLM response
+        llm_response = await self.llm1.ainvoke(prompt)
+        response_text = getattr(llm_response, "content", "").strip()
 
         print("MongoDB query generated:")
-        print(mongo_query_str)
+        print(response_text)
 
-        # ✅ Extract query inside db.collection.find(...)
-        match = re.search(r"find\((.*)\)", mongo_query_str, re.DOTALL)
-        if not match:
-            raise ValueError("Could not extract MongoDB query from LLM response")
-
-        raw_query = match.group(1)
-        print(raw_query)
         try:
-            # ✅ Use ast.literal_eval for safety
-            query_dict = ast.literal_eval(raw_query)
+            # Parse the JSON to get query_filter
+            response_json = json.loads(response_text)
+            query_filter = response_json.get("query_filter", {})
         except Exception as e:
-            raise ValueError(f"Failed to parse MongoDB query from LLM: {e}")
+            raise ValueError(f"Failed to parse JSON from LLM response: {e}")
 
-        db = self.mongo_client[database_name]
+        # Access MongoDB (Motor async client)
+        db = mongo_client[database_name]
         collection = db[collection_name]
-        result = await collection.find(query_dict).to_list(length=100)
+        result = collection.find(query_filter).to_list(length=100)
 
-        return result
+        # Format a readable response string
+        if not result:
+            response_text = "No data found for your query."
+        else:
+            # Extract only relevant Q&A pairs from chat_history (optional)
+            formatted = []
+            for doc in result:
+                for block in doc.get("chat_history", []):
+                    for qa in block.get("chat_history", []):
+                        q = qa.get("question", "")
+                        a = qa.get("answer", "")
+                        formatted.append(f"Q: {q}\nA: {a}")
+            response_text = "\n\n".join(formatted)
+
+        # Return in the expected format
+        return {"response": response_text}
+
+
 
 
 

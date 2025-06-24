@@ -282,22 +282,42 @@ class AgentConfig:
 
         Each document has:
         {
-        "session_id": "string",
+        "session_id": "string", // Unique identifier for the user session
+        "registration_date": "ISODate", // Date when the user registered (if applicable)
         "chat_history": [
             {
             "chat_history": [
-                {"question": "What is your address?", "answer": "Delhi"},
-                {"question": "What is your age?", "answer": "29 years"},
-                {"question": "What is your email address?", "answer": "rahul@gmail.com"},
-                ...
+                {"question": "What is your address?", "answer": "string"},
+                {"question": "What is your age?", "answer": "string"},
+                {"question": "What is your email address?", "answer": "string"},
+                // ... other chat fields
             ]
             }
         ]
         }
 
-        Convert the following natural language query into a MongoDB query:
+        You are an AI assistant helping to construct MongoDB query filters.
+        Your task is to convert a natural language query into a MongoDB query filter object.
+        This filter object will later be combined with the user's session ID by the application.
 
-        "Show me all users from Delhi who registered after January 1, 2024"
+        The output must be a JSON object with a single key:
+        'query_filter': (object) - the MongoDB query filter object (e.g., for a .find() method).
+        If no specific additional filter is needed, return an empty object {}.
+        If conditions require it, use '$elemMatch' for chat_history.
 
-        MongoDB query:
-"""
+        Examples:
+        User Query: "What is my address?"
+        Response: {"query_filter": {"chat_history.0.chat_history": {"$elemMatch": {"question": "What is your address?"}}}}
+
+        User Query: "Did I mention my email address?"
+        Response: {"query_filter": {"chat_history.0.chat_history": {"$elemMatch": {"question": "What is your email address?"}}}}
+
+        User Query: "Show my data."
+        Response: {"query_filter": {}}
+
+        User Query: "Show me details where my age was '29 years'."
+        Response: {"query_filter": {"chat_history.0.chat_history": {"$elemMatch": {"question": "What is your age?", "answer": "29 years"}}}}
+
+        User Query: "{user_query}"
+        Response:
+    """
