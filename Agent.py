@@ -75,7 +75,7 @@ class IntentRouter:
             ("Permanent address", "Please let meknow your permanent address"),
             ("covid", "Have you have covid in the past 5 years?"),
             ("Year", "In which year did you last have covid"),
-            ("vaccinated","Were you avccinated at that time"),
+            ("vaccinated","Were you vaccinated at that time"),
             ("No covid", "Have you ever shown symptons of covid"),
             ("Vaccination before", "Have you ever been vaccinated for Covid?"),
             ("email", "What is your email address?"),
@@ -147,7 +147,6 @@ class IntentRouter:
         return str(chat_log)
 
     
-    
     def classify_intent(self, user_input, question=None, chat_log=None):
 
         if chat_log is None:
@@ -187,28 +186,14 @@ class IntentRouter:
         try:
             result = self.llm2.invoke(messages)
             print("[DEBUG] Intent classification raw output:", result.content)
-            intent = json.loads(result.content).get("intent", "unknown")
+            intent = json.loads(result.content)
+            value = intent.get("intent") or intent.get("clarification", "unknown")
+            #print(value)
         except Exception as e:
             logging.warning(f"Intent classification error: {e}")
             intent = "unknown"
 
-        return intent
-
-    def clarification(self, user_input, question=None):
-        messages = [
-            {"role": "system", "content": AgentConfig.CLARIFICATION_PROMPT },
-            {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
-        ]
-
-        try:
-            result = self.llm2.invoke(messages)
-            print("[DEBUG] Intent classification raw output:", result.content)
-            intent = json.loads(result.content).get("intent", "unknown")
-        except Exception as e:
-            logging.warning(f"Intent classification error: {e}")
-            intent = "unknown"
-
-        return intent
+        return value
     
     def information_extract(self, chat_history):
         messages = [
@@ -240,28 +225,11 @@ class IntentRouter:
         ]
 
         try: 
-            self.llm1.temperature = 0.7
-            response = self.llm1.invoke(messages)
+            self.llm2.temperature = 0.9
+            response = self.llm2.invoke(messages)
             return response.content.strip()
         except Exception as e:
             return f"Error: {str(e)}"
-
-    async def serious_classifier(self, user_input, question):
-        print("serious_classifier")
-        messages = [
-            {"role": "system", "content": AgentConfig.SERIOUS_ClASSIFIER_PROMPT},
-            {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
-        ]
-
-        try: 
-            self.llm1.temperature = 0.7
-            response = self.llm1.invoke(messages)
-            return response.content.strip()
-        except Exception as e:
-            return f"Error: {str(e)}"
-
-
-        
 
     async def interact(self, state):
         answers = state.get("answers", {})
@@ -280,13 +248,51 @@ class IntentRouter:
             "status": "complete",
             "answers": answers
         }
+    def greeting(self, user_input, question):
+        print("greeting")
+        messages = [
+            {"role": "system", "content": AgentConfig.GREETING_PROMPT},
+            {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
+        ]
 
-        
+        try: 
+            self.llm2.temperature = 0.9
+            response = self.llm2.invoke(messages)
+            return response.content.strip()
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
     async def simple_llm(self, state):
         full_response = ""
         try:
             logging.info("simple_llm started")
-            print("simple_llm")
+            print("conversational_agent")
+            # Use a prompt from the state or default to a basic instruction
+            system_prompt = state.get("system_prompt", AgentConfig.CLARIFICATION_ASSISTANT_PROMPT)
+            user_input = state['input']
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_input)
+            ]
+
+            async for chunk in self.llm2.astream(
+                messages,
+                config={"configurable": {"session_id": state.get('email', 'default_session')}},
+            ):
+                if hasattr(chunk, "content") and chunk.content:
+                    full_response += chunk.content
+                    yield {"response": full_response}
+                    
+        except Exception as e:
+            logging.exception("Error during streaming")
+            yield {"response": f"Error processing response: {e}"}
+
+    async def general_agent(self, state):
+        full_response = ""
+        try:
+            logging.info("simple_llm started")
+            print("general_agent")
             # Use a prompt from the state or default to a basic instruction
             system_prompt = state.get("system_prompt", AgentConfig.QUERY_PROMPT)
             user_input = state['input']
@@ -372,9 +378,6 @@ class IntentRouter:
         return {"response": response_text}
 
 
-
-
-
     def unknown_intent_handler(self, state):
         print("Handling unknown intent...")
         return {"response": "Sorry, I didn't understand that request."}
@@ -387,6 +390,7 @@ class IntentRouter:
         builder.add_node("simple_llm", self.simple_llm)
         builder.add_node("RAG", self.RAG)
         builder.add_node("mongo_query", self.mongo_query)
+        builder.add_node("general_agent", self.general_agent)
         builder.add_node("unknown_intent_handler", self.unknown_intent_handler)
         builder.add_node("purpose_classifier", self.purpose_classifier)
 
@@ -401,6 +405,7 @@ class IntentRouter:
             "CONVERSATION_AGENT": "simple_llm",
             "RAG_AGENT": "RAG",
             "MONGO_QUERY": "mongo_query",
+            "GENERAL_AGENT": "general_agent",
             "WEB_SEARCH_PROCESSOR_AGENT": "RAG",  # Or a separate web agent if available
             "low_confidence_fallback_agent": "unknown_intent_handler",
             "parse_error_fallback_agent": "unknown_intent_handler",
@@ -437,8 +442,18 @@ class IntentRouter:
             # Classify intent of reply to welcome message
             intent = self.classify_intent(input_text, AgentConfig.WELCOME_MESSAGE)
             
+            state["negative_count"] = state.get("negative_count", 0)
 
-            if intent == "denial":
+            if intent in ("denial"):
+                state["negative_count"] += 1
+
+                if state["negative_count"] >= 2:
+                
+                    return {
+                        "status": "ended",
+                        "message": "I understand. Thank you for taking the time to talk to me. Goodbye",
+                        "session_id": session_id
+                    }
                 explanation = await self.purpose_classifier(input_text, "May I ask you a few questions to better assist you?")
                 return {
                     "status": "denial",
@@ -446,7 +461,7 @@ class IntentRouter:
                     "session_id": session_id
                 }
             
-            if intent == "query":
+            if intent in ("query"):
                 email = answers.get("email", "default@example.com")
                 self.session_manager.update_state(session_id, state)
                 current_question = dict(self.questions).get("name", "")
@@ -462,8 +477,17 @@ class IntentRouter:
                     "message": response_text + "\nCan we start with the survey now?\n",
                     "session_id": session_id
                 }
+            
+            if intent in ("greeting"):
+                self.session_manager.update_state(session_id, state)
+                response_text = self.greeting(input_text, chat_log)
+                return {
+                    "status": "Queries",
+                    "message": response_text + "should we start with the survey?",
+                    "session_id": session_id
+                }
 
-            if intent in ("answer", "acceptance"):
+            if intent in ("answer"):
                 state["welcomed"] = True
                 self.session_manager.update_state(session_id, state)
                 response = await self.interact(state)
@@ -476,6 +500,7 @@ class IntentRouter:
                     "session_id": session_id
                 }
 
+
         # Handle personal information collection
         if len(answers) < len(self.questions):
             if input_text:
@@ -484,17 +509,9 @@ class IntentRouter:
                 current_question = dict(self.questions).get(current_key, "")
                 intent = self.classify_intent(input_text, current_question, chat_log)
 
-                if intent == "clarification":
-                    clarification = self.clarification(input_text, current_question)
-                    return {
-                                "status": "clarification",
-                                "message": clarification + "Please answer the question accordingly \n" + current_question,
-                                "session_id": session_id
-                            }
-
-                if intent == "answer" and current_key in ["name", "age", "address", "email"] :
+                if intent == "answer" and current_key in ["name", "age", "address", "email", "Permanent address"] :
                     intent1 = self.classify_answer(input_text, current_question)
-                    print(intent1)
+                    #print("intent1 output:", intent1)
                     if intent1 == "satisfactory":
                         answers[current_key] = input_text
                         state["answers"] = answers
@@ -504,7 +521,7 @@ class IntentRouter:
                             "question": current_question,
                             "answer": input_text
                         }
-                        store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
 
                         if current_key == "email":
                             state["current_key"] = "Thanks"
@@ -520,87 +537,87 @@ class IntentRouter:
                         response["session_id"] = session_id
                         return response
                     else :
+                        clarification = intent1
                         return {
                                 "status": "ready_for_questions",
                                 "message": intent1,
                                 "session_id": session_id
                             }
-
-                if current_key == "address" and intent=="answer":
-                    state["current_key"] = "Confirm address"
+                
+                if intent in ("greeting"):
                     self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get(current_key, "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
+                    response_text = self.greeting(input_text, chat_log)
+                    return {
+                        "status": "Queries",
+                        "message": response_text,
+                        "session_id": session_id
+                    }
+
+                if current_key == "Confirm address":
+                    intent1 = self.classify_answer(input_text, current_question) 
+                    print(intent1)
+                    if intent1 == "acceptance":
+                        state["current_key"] = "covid"
+                        self.session_manager.update_state(session_id, state)
+                        next_question = dict(self.questions).get("covid", "")
+                        chat_entry = {
+                                "question": current_question,
+                                "answer": input_text
+                            }
+                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                        return {
+                            "status": "correct address",
+                            "message": "Thanks for the clarification.\n" + next_question,
+                            "session_id": session_id
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     
-                    return {
-                        "status": "Permanent_address",
-                        "message": next_question,
-                        "session_id": session_id
-                    } 
-
-                if current_key == "Confirm address" and intent == "acceptance":
-                    state["current_key"] = "covid"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("covid", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
+                    if intent1 == "denial":
+                        state["current_key"] = "Permanent address"
+                        self.session_manager.update_state(session_id, state)
+                        next_question = dict(self.questions).get("Permanent address", "")
+                        chat_entry = {
+                                "question": current_question,
+                                "answer": input_text
+                            }
+                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                        return {
+                            "status": "correct address",
+                            "message": "Thanks for the clarification.\n" + next_question,
+                            "session_id": session_id
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "correct address",
-                        "message": "Thanks for the clarification.\n" + next_question,
-                        "session_id": session_id
-                    }
 
-                if current_key == "Confirm address" and intent == "Different address":
-                    state["current_key"] = "Permanent address"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("Permanent address", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
+                if current_key == "covid":
+                    intent1 = self.classify_answer(input_text, current_question) 
+                    print(intent1)
+                    if intent1 == "acceptance":
+                        state["current_key"] = "Year"
+                        self.session_manager.update_state(session_id, state)
+                        next_question = dict(self.questions).get("Year", "")
+                        chat_entry = {
+                                "question": current_question,
+                                "answer": input_text
+                            }
+                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                        return {
+                            "status": "correct address",
+                            "message": "Thanks for the clarification.\n" + next_question,
+                            "session_id": session_id
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "correct address",
-                        "message": "Thanks for the clarification.\n" + next_question,
-                        "session_id": session_id
-                    }
-
-                if current_key == "Permanent address" and intent == "answer":
-                    state["current_key"] = "covid"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("covid", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
+                    
+                    if intent1 == "denial":
+                        state["current_key"] = "No covid"
+                        self.session_manager.update_state(session_id, state)
+                        next_question = dict(self.questions).get("No covid", "")
+                        chat_entry = {
+                                "question": current_question,
+                                "answer": input_text
+                            }
+                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                        return {
+                            "status": "correct address",
+                            "message": "Thanks for the clarification.\n" + next_question,
+                            "session_id": session_id
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "correct address",
-                        "message": "Thanks for the clarification.\n" + next_question,
-                        "session_id": session_id
-                    }
-
-                if current_key == "covid" and intent == "acceptance":
-                    state["current_key"] = "Year"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("Year", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
-                        }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "Covid positive",
-                        "message": next_question,
-                        "session_id": session_id
-                    }
 
                 if current_key == "Year" and intent == "answer":
                     state["current_key"] = "vaccinated"
@@ -610,14 +627,14 @@ class IntentRouter:
                             "question": current_question,
                             "answer": input_text
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid positive",
                         "message": next_question,
                         "session_id": session_id
                     }
 
-                if current_key == "vaccinated" and intent == "acceptance":
+                if current_key == "vaccinated" and intent == "answer":
                     state["current_key"] = "email"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("email", "")
@@ -625,44 +642,29 @@ class IntentRouter:
                             "question": current_question,
                             "answer": input_text
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid positive",
                         "message": next_question,
                         "session_id": session_id
                     }
-
-                if current_key == "vaccinated" and intent == "no vaccine":
-                    state["current_key"] = "email"
+                
+                if current_key == "No covid" and intent == "answer":
+                    state["current_key"] = "Vaccination before"
                     self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("email", "")
+                    next_question = dict(self.questions).get("Vaccination before", "")
                     chat_entry = {
                             "question": current_question,
                             "answer": input_text
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "Covid positive",
-                        "message": next_question,
-                        "session_id": session_id
-                    }
-
-                if current_key == "covid" and intent == "no covid":
-                    state["current_key"] = "No covid"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("No covid", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
-                        }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid negative",
                         "message": next_question,
                         "session_id": session_id
                     }
 
-                if current_key == "No covid" and intent in ["acceptance", "answer", "denial", "no covid"]:
+                if current_key == "Vaccination before" and intent == "answer":
                     state["current_key"] = "email"
                     self.session_manager.update_state(session_id, state)
                     next_question = dict(self.questions).get("email", "")
@@ -670,15 +672,14 @@ class IntentRouter:
                             "question": current_question,
                             "answer": input_text
                         }
-                    store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
                     return {
                         "status": "Covid negative",
                         "message": next_question,
                         "session_id": session_id
                     }
 
-
-                if intent == "denial":
+                if intent == "denial" and current_key not in ["Thanks"]:
                     explanation = await self.purpose_classifier(input_text, current_question)
                     return {
                         "status": "denial",
@@ -689,14 +690,31 @@ class IntentRouter:
                 if intent == "repeat":
                     return {
                         "status": "repeat",
-                        "message": f"Sure, here is the question again:\n{current_question}",
+                        "message": f"Ok, I understand, here is the question again:\n{current_question}",
+                        "session_id": session_id
+                    }
+                
+                if intent in ("denial"):
+                    state["negative_count"] += 1
+
+                    if state["negative_count"] >= 2:
+                    
+                        return {
+                            "status": "ended",
+                            "message": "I understand. Thank you for taking the time to talk to me. Goodbye",
+                            "session_id": session_id
+                        }
+                    explanation = await self.purpose_classifier(input_text, "May I ask you a few questions to better assist you?")
+                    return {
+                        "status": "denial",
+                        "message": explanation + "\nCould you please reconsider starting with a few questions?",
                         "session_id": session_id
                     }
 
-                if current_key == "Thanks" and intent == "negative":
-                    data = retrieve_data(mongo_client, database_name, session_id)
+                if current_key == "Thanks" and intent == "denial":
+                    '''data = retrieve_data(mongo_client, database_name, session_id)
 
-                    # Safely extract chat_history
+                   # Safely extract chat_history
                     try:
                         chat = data['user_data'][0]['chat_history']
                     except (KeyError, IndexError) as e:
@@ -712,7 +730,7 @@ class IntentRouter:
 
                     chat_entry = {"chat_history": extract
                             } 
-                    store_user_data(mongo_client, database_name, collection_name_1, session_id, chat_entry)
+                    store_user_data(mongo_client, database_name, collection_name_1, session_id, chat_entry) '''
 
                     return {
                         "status": "ended",
@@ -873,7 +891,7 @@ async def chat_loop():
             bot_message = response.get("message") or response.get("question", "")
             print_bot_message(bot_message, session_id)
         elif status == "ended":
-            bot_message = "The session has ended. Thank you!"
+            bot_message = "That concludes my survey. Thank you for taking my call. Goodbye"
             print_bot_message(bot_message, session_id)
             break
         elif response.get("response"):

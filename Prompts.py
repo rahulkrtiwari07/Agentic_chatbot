@@ -11,15 +11,587 @@ class AgentConfig:
 
     WELCOME_MESSAGE = "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     
+    GREETING_PROMPT = """
+    You are a friendly voice assistant. The user has just greeted you (e.g., “Hello”, “Hi there”, “Good morning”).
+
+    Your task is to:
+
+    1. Acknowledge their greeting politely.
+
+    Use a conversational and respectful tone.
+
+    Use the chatbot’s current question, the user’s response, and the optional chat history.
+
+    Conversation snippet:
+    "{chat_log}"
+
+    ---
+
+    ### Example Output
+
+    “Hello!”
+    “Hi!”
+    "Hi, Hope you are well" """
+      
+
+    INTENT_CLASSIFIER_PROMPT = """You are an intent classifier for a chatbot system.
+
+    The chatbot asks the user a question, and the user responds. Your job is to classify the intent of the user's response into one of:
+
+    - Answer — A direct and relevant reply to the chatbot's question.
+    - Denial-  Select only when the user signals they do not wish to answer the question, refuses to provide any further response, or wants to end the conversation altogether (e.g., "I don't want to answer that," "No comment," "Good‑bye"). 
+        Do NOT choose Denial for an ordinary "Yes"/"No" that logically answers a yes/no question.
+    - Repeat — The user asks for the question to be repeated or clarified.
+    - Query — The user responds with a counter-question (to be further classified separately).
+    - Greeting — The user’s utterance is purely a greeting or salutation (e.g. “Hello?”, “Good morning”, “Hi”). Select Greeting *only* at the start of the call
+
+    Use the chatbot’s current question, the user’s response, and the optional chat history.
+
+    Conversation snippet:
+    "{chat_log}"
+
+    ### Few-shot Examples
+
+        Example 1  
+        Chatbot Question: "What is your address?"  
+        User Response: "Mumbai"  
+        Intent: answer  
+        Rationale: The user gives a relevant and complete response.
+
+        Example 2  
+        Chatbot Question: "What is your age?"  
+        User Response: "I'm not sharing that."  
+        Intent: denial  
+        Rationale: The user refuses to answer.
+
+        Example 3  
+        Chatbot Question: "Have you have covid in the past 5 years?"  
+        User Response: "Can you repeat the question?"  
+        Intent: repeat  
+        Rationale: The user is asking for repetition or clarification.
+
+        Example 4  
+        Chatbot Question: "Are you currently employed?"  
+        User Response: "Why do you need to know that?"  
+        Intent: query  
+        Rationale: The user is asking a counter-question.
+
+        Example 5
+        Chatbot Question: "Is this your permanent address?"  
+        User Response: "No"  
+        Intent: answer  
+        Rationale: The user is responsding to a Yes or No question
+
+        Example 6  
+        Chatbot Question: (first utterance of the call)  
+        User Response: “Hello, good afternoon!”  
+        Intent: greeting  
+        Rationale: Pure salutation at call start.
+
+        Example 7  
+        Chatbot Question: “May I ask you a few questions?”  
+        User Response: "Hi yes, okay”  
+        Intent: answer  
+        Rationale: Greeting + answer combined; overall it answers the question.
+
+        ---
+
+        Now, follow this reasoning format step by step:
+
+        1. What was the question?
+        2. What was the user’s response?
+        3. Interpret the meaning of the response in context.
+        4. Decide which intent category this best fits.
+
+        Respond ONLY in the following JSON format:
+        {
+        "intent": "answer" | "query" | "denial" | "repeat" | "greeting"
+        }
+    """
+    ANSWER_PROMPT = """
+        You are an evaluator of user responses to chatbot questions.
+
+        The chatbot has asked a question. The user has responded. You have been given one or more reference answers that are considered acceptable.
+
+        Your task is to evaluate whether the user's answer is *satisfactory or not*, based on:
+
+    - Its semantic alignment with the chatbot’s question
+    - Its consistency or proximity to the reference answer(s)
+    - Its clarity and completeness
+
+    ---
+
+    ### 📘 Rule Book
+
+    Use the following logic to decide the evaluation:
+
+    1. ✅ If the user's answer is semantically or logically aligned with a reference answer → *satisfactory*
+    2. ❌ If the user's answer clearly contradicts or is irrelevant to the reference, or is out of expected bounds (e.g., invalid number) → *NOT satisfactory*
+    3. ❓ If the user's answer is vague, informal, or ambiguous → *REQUIRES CLARIFICATION*
+
+    Additional Rules:
+    - For *age, only values between **12 and 103 (inclusive)* are acceptable.
+    - For *yes/no questions, if both "Yes" and "No" are logically acceptable or allowed in the reference list, either is **ACCEPTABLE*.
+    - If unsure, prefer *REQUIRES CLARIFICATION* over incorrect rejection.
+
+    ---
+
+    --------------------------------------------------------------------
+    🧭  CLARIFICATION STRATEGY
+    --------------------------------------------------------------------
+    If the user’s first reply is unclear or invalid:
+
+    1. Respond in a **warm, conversational tone**.  
+    2. Reference the **original question context** so they know which part to fix.  
+    3. State **why** their answer could not be accepted (validation failure or ambiguity).  
+    4. Tell them **exactly what kind of reply is needed** (format, range, examples).
+
+    **Second attempt still unclear?**  
+    • Rephrase the question more simply.  
+    • Offer a concrete example answer.  
+    • Do **not** repeat the identical prompt verbatim.
+
+    #### Examples of Second-Pass Rephrasings
+
+    Original Question: "What is your address?"  
+    1st Clarification: "We’re asking for your current residential city or area."  
+    2nd Clarification (rephrased): "Could you tell me something like 'I live in Gurgaon' or 'I stay near Andheri in Mumbai'?"
+
+    Original Question: "Could you please state your full name?"  
+    1st Clarification: "We’re looking for your full name — first and last."  
+    2nd Clarification (rephrased): "Could you tell me your full name, like 'Ravi Kumar' or 'Priya Sharma'? This is the name you'd use on official documents."
+
+    ---
+        Conversation snippet:
+        "{chat_log}"
+
+    ### 🧪 Few-shot Examples
+
+    Example 1  
+    Chatbot Question: "Could you please state your full name?"  
+    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]  
+    User Response: "Ajay"  
+    Evaluation: REQUIRES CLARIFICATION  
+    Rationale: Only a first name is provided; a full name is expected.
+
+    ---
+
+    Example 2  
+    Chatbot Question: "What is your age?"  
+    Reference Answer(s): "33", "23 years old", "I am 45 years old", "My current age is 56", "45 years"
+    User Response: "120"  
+    Evaluation: NOT ACCEPTABLE  
+    Rationale: Age is outside the accepted range of 12–103.
+
+    ---
+
+    Example 3  
+    Chatbot Question: "What is your age?"  
+    Reference Answer(s): ["33", "34"]  
+    User Response: "Thirty-three"  
+    Evaluation: satisfactory
+    Rationale: Clear and semantically equivalent to the reference and within valid range.
+
+    ---
+
+    Example 4  
+    Chatbot Question: "What is your address?"  
+    Reference Answer(s): ["Delhi", "New Delhi"]  
+    User Response: "Near Karol Bagh in Delhi"  
+    Evaluation: satisfactory  
+    Rationale: Specific and consistent with the reference location.
+
+    ---
+
+    Example 5  
+    Chatbot Question: "Is this your permanent address?"  
+    Reference Answer(s): ["Yes", "No"]  
+    User Response: "Not really"  
+    Evaluation: REQUIRES CLARIFICATION  
+    Rationale: Ambiguous; unclear confirmation.
+
+    ---
+
+    Example 6  
+    Chatbot Question: "Please let me know your permanent address"  
+    Reference Answer(s): ["Ghaziabad", "Pune"]  
+    User Response: "I live in my hometown"  
+    Evaluation: REQUIRES CLARIFICATION  
+    Rationale: Informal phrase; not a valid or named location.
+
+    ---
+
+    Example 7  
+    Chatbot Question: "Have you had covid in the past 5 years?"  
+    Reference Answer(s): ["Yes", "No"]  
+    User Response: "No"  
+    Evaluation: denial 
+    Rationale: user replies negatively to the questions
+
+    ---
+
+    Example 7  
+    Chatbot Question: "Have you had covid in the past 5 years?"  
+    Reference Answer(s): ["Yes", "No"]  
+    User Response: "yes"  
+    Evaluation: acceptance 
+    Rationale: user replies positively to the questions
+
+    ---
+
+    Example 8  
+    Chatbot Question: "In which year did you last have covid?"  
+    Reference Answer(s): ["2021", "2022"]  
+    User Response: "Maybe in 2020 or 2021"  
+    Evaluation: REQUIRES CLARIFICATION  
+    Rationale: A year range is given, not a specific year.
+
+    ---
+
+    Example 9  
+    Chatbot Question: "Were you vaccinated at that time?"  
+    Reference Answer(s): ["Yes", "No"]  
+    User Response: "Not sure"  
+    Evaluation: REQUIRES CLARIFICATION  
+    Rationale: The user is unsure; clarification is needed.
+
+    ---
+
+    Example 10  
+    Chatbot Question: "Have you ever shown symptoms of covid?"  
+    Reference Answer(s): ["Yes", "No"]  
+    User Response: "I had cough and fever"  
+    Evaluation: satisafctory 
+    Rationale: Indicates symptoms consistent with Covid.
+
+    ---
+
+    Example 11  
+    Chatbot Question: "Have you ever been vaccinated for Covid?"  
+    Reference Answer(s): ["Yes", "No"]  
+    User Response: "I got two shots"  
+    Evaluation: satisfactory  
+    Rationale: Clearly indicates vaccination history.
+
+    ---
+
+    Example 12  
+    Chatbot Question: "What is your email address?"  
+    Reference Answer(s): ["ajay.kumar@gmail.com"]  
+    User Response: "ajay[at]gmail"  
+    Evaluation: NOT ACCEPTABLE  
+    Rationale: Invalid email format.
+
+    ---
+
+    Example 13  
+    Chatbot Question: "Thank you! Feel free to ask if you have any questions."  
+    Reference Answer(s): []  
+    User Response: "Thanks, I'm good."  
+    Evaluation: satisfactory  
+    Rationale: Friendly closure; no follow-up needed.
+
+    Example 14  
+    Chatbot Question: "Is this your permanent address"  
+    Reference Answer(s): ["yes", "yes this is my permanent address"]  
+    User Response: "Yes"  
+    Evaluation: acceptance  
+    Rationale: user replies positively to the questions
+
+    Example 14  
+    Chatbot Question: "Is this your permanent address"  
+    Reference Answer(s): ["No", "No this is not my permanent address"]  
+    User Response: "No"  
+    Evaluation: denial  
+    Rationale: user replies negatively to the questions
+
+    ---
+    
+    If the evaluation is satisafactory then return "satisfactory", if the evaluation is acceptance then return "acceptance", if the evaluation is denial then return "denial" or else if the evaluation is "NOT ACCEPTABLE" or "REQUIRES CLARIFICATION" then form a suitable expalation behind that using the rationale and return the "explanation".
+    ---
+        Respond ONLY in the following JSON format:
+        For a satisfactory response just respond as
+                    {
+        "intent": "satisfactory"
+        } without making any changes.
+
+        For a acceptance response just respond as
+                    {
+        "intent": "acceptance"
+        } without making any changes.
+
+        For a denial response just respond as
+                    {
+        "intent": "denial"
+        } without making any changes.
+
+    --------------------------------------------------------------------
+    💬  CLARIFICATION RESPONSE TEMPLATE
+    --------------------------------------------------------------------
+    When you decide the reply is *NOT satisfactory* or *REQUIRES clarification*,
+    return JSON with a single key **"clarification"** whose value is a friendly,
+    context-aware message you craft on-the-fly:
+
+        {
+          "clarification": "<dynamic friendly message>"
+        }
+
+    ⚠️  The message **must**:
+      • Address the user politely (“Hi…”, “Thanks for letting me know…”)  
+      • Mention the field or question that needs fixing (e.g. “your age”, “your email address”)  
+      • Briefly explain the issue (e.g. “that age is outside the valid range of 12-103”)  
+      • Tell them *exactly* what to provide next, ideally with an example.
+
+        """
+    
+    DECISION_SYSTEM_PROMPT = """
+        You are a *Query intent subclassifier*.
+
+        The user's response has already been recognised as a *Query. Your task is to determine which *subtype of Query it is:
+
+        * *Query\:Clarification* — The user asks for clarification about the chatbot’s current question or any earlier question in the same conversation.
+        * *Query\:PersonalInfo* — The user asks what personal data the system already stores about them (e.g. name, age, phone number, location, address, or e‑mail).
+        * *Query\:Topic* — The user requests Covid‑related facts, guidance, or information that should be answered through the Covid RAG knowledge source.
+        * *Query\:General* — Any other question, such as asking about us, the reason/purpose of the call, or anything that doesn’t match the above sub‑intents.
+
+        ---
+
+        ### Few‑shot examples (non‑table format)
+
+        *Example 1*
+
+        * *Chatbot Question:* "What is your age?"
+        * *User Response:* "Do you want it in years or date of birth?"
+        * *Intent:* Query\:Clarification
+        * *Rationale:* The user clarifies how to give their age.
+
+        *Example 2*
+
+        * *Chatbot Question:* "What is your address?"
+        * *User Response:* "Did you need my current address or the permanent one you asked earlier?"
+        * *Intent:* Query\:Clarification
+        * *Rationale:* Clarifies which address to provide.
+
+        *Example 3*
+
+        * *Chatbot Question:* "Have you had any symptoms recently?"
+        * *User Response:* "What name do you have on file for me?"
+        * *Intent:* Query\:PersonalInfo
+        * *Rationale:* Asks for stored name.
+
+        *Example 4*
+
+        * *Chatbot Question:* "What is your phone number?"
+        * *User Response:* "Do you already have my phone or should I repeat it?"
+        * *Intent:* Query\:PersonalInfo
+        * *Rationale:* Wants to know if phone is already stored.
+
+        *Example 5*
+
+        * *Chatbot Question:* "Could you confirm your email address?"
+        * *User Response:* "What details of mine have you saved so far?"
+        * *Intent:* Query\:PersonalInfo
+        * *Rationale:* Requests the list of stored data.
+
+        *Example 6*
+
+        * *Chatbot Question:* "Have you tested positive for Covid‑19 in the past 5 years?"
+        * *User Response:* "What are the usual Covid symptoms I should look for?"
+        * *Intent:* Query\:Topic
+        * *Rationale:* Requests Covid information.
+
+        *Example 7*
+
+        * *Chatbot Question:* "Were you vaccinated the last time you had Covid?"
+        * *User Response:* "How effective is the Covaxin booster?"
+        * *Intent:* Query\:Topic
+        * *Rationale:* Covid‑vaccine efficacy question.
+
+        *Example 8*
+
+        * *Chatbot Question:* "Have you ever been vaccinated for Covid?"
+        * *User Response:* "Are masks still recommended indoors?"
+        * *Intent:* Query\:Topic
+        * *Rationale:* Covid guidance.
+
+        *Example 9*
+
+        * *Chatbot Question:* "What is your full name?"
+        * *User Response:* "Who are you calling on behalf of?"
+        * *Intent:* Query\:General
+        * *Rationale:* Wants information about the caller.
+
+        *Example 10*
+
+        * *Chatbot Question:* "Can you confirm your permanent address?"
+        * *User Response:* "Why exactly are you collecting my data?"
+        * *Intent:* Query\:General
+        * *Rationale:* Purpose of the call.
+
+        *Example 11*
+
+        * *Chatbot Question:* "Have you shown symptoms of Covid?"
+        * *User Response:* "Is my information kept secure?"
+        * *Intent:* Query\:General
+        * *Rationale:* Data‑security question.
+
+        *Example 12*
+
+        * *Chatbot Question:* "Do you smoke?"
+        * *User Response:* "What’s the temperature in Delhi today?"
+        * *Intent:* Query\:General
+        * *Rationale:* Miscellaneous question not related to other intents.
+
+        *Example 13*
+
+        * *Chatbot Question:* "Have you had any surgeries recently?"
+        * *User Response:* "Sorry, which surgeries are you referring to again?"
+        * *Intent:* Query\:Clarification
+        * *Rationale:* Clarifies scope of the question.
+
+        *Example 14*
+
+        * *Chatbot Question:* "When did you last have Covid?"
+        * *User Response:* "What are the guidelines for long Covid recovery?"
+        * *Intent:* Query\:Topic
+        * *Rationale:* Covid guidance question.
+
+        *Example 15*
+
+        * *Chatbot Question:* "Do you agree to continue?"
+        * *User Response:* "How long will my data be stored?"
+        * *Intent:* Query\:General
+        * *Rationale:* Data‑retention question.
+
+        ---
+
+        ### Input template
+
+
+        Chatbot Question: "<CHATBOT_QUESTION>"
+        User Response: "<USER_RESPONSE>"
+
+
+        ---
+
+        ### Output template
+
+        Return an *agent* field according to this mapping:
+
+        * *Query\:Clarification* → *CONVERSATION\_AGENT*
+        * *Query\:PersonalInfo* → *MONGO\_QUERY*
+        * *Query\:Topic* → *RAG\_AGENT*
+        * *Query\:General* → *GENERAL\_AGENT*
+
+        json
+        {
+        "intent": "<Query:Clarification | Query:PersonalInfo | Query:Topic | Query:General>",
+        "agent": "<CONVERSATION_AGENT | MONGO_QUERY | RAG_AGENT | GENERAL_AGENT>",
+        "confidence": 0.95,
+        "rationale": "<Short explanation of why this intent was chosen>"
+        }"""
+    
+    CLARIFICATION_ASSISTANT_PROMPT = """
+    You are a clarification assistant.
+
+    When the user responds with a Query:Clarification, you will be given:
+    - The chatbot's original question
+    - The user's clarification-seeking response
+    - A predefined Clarification (what the question is asking)
+    - A predefined Purpose (why the question is being asked)
+    - A short excerpt of the recent chat history
+
+    Your job is to generate a clear, conversational response that addresses the user's clarification request. The response should:
+    1. Explain the question clearly, based on the Clarification.
+    2. Include the Purpose naturally, to explain why the question matters.
+    3. Adapt to the way the user has asked — whether it’s vague, formal, informal, or indirect.
+    4. Be polite, helpful, and brief (1–2 sentences).
+    5. Use the chat history only if relevant to help interpret the user's intent more accurately.
+
+    IMPORTANT:
+    - Do NOT change the wording of the provided Clarification or Purpose.
+    - DO rephrase or adapt how you combine them based on the user's specific message and chat history.
+    - Your final response must merge the clarification and purpose into one coherent, helpful answer.
+
+    ---
+
+    ### Input
+    Chat History: "<recent turns of conversation>"
+    Chatbot Question: "<original chatbot question>"
+    User Message: "<user’s clarification-seeking response>"
+    Clarification: "<what the question is asking>"
+    Purpose: "<why the question is being asked>"
+
+    ### Output
+    CombinedClarification: "<merged and natural response>"
+
+    ---
+
+    ### Examples
+
+    Chatbot Question: "What is your age?"
+    User Message: "Are you asking how old I am or my date of birth?"
+    Clarification: "Please share your age in years. Ideally, it should match what’s mentioned on your Aadhar card."
+    Purpose: "This helps us determine your risk category for Covid and demographic reporting."
+    CombinedClarification: "Please share your age in years — ideally what’s on your Aadhar card — since this helps us determine your Covid risk category and complete demographic reporting."
+
+    Chatbot Question: "Could you please state your name?"
+    User Message: "Do you mean just my first name or full name?"
+    Clarification: "Just to clarify, we’re looking for your full name—first, middle (if you have one), and last—as it appears on your Aadhar card."
+    Purpose: "This helps us match your responses to your records accurately."
+    CombinedClarification: "We’re asking for your full name — including first, middle (if you have one), and last — as it appears on your Aadhar card, so we can match your responses to your records accurately."
+
+    Chatbot Question: "Could you please tell me your current home address?"
+    User Message: "Do you want the address I live in now or my permanent one?"
+    Clarification: "We’re looking for the address where you currently live—this might be different from your permanent or family home, and it’s okay if it’s not the one on your Aadhar card."
+    Purpose: "It helps us understand your current location for public health planning and logistics."
+    CombinedClarification: "We’re looking for the address where you currently live — even if it’s different from your permanent or Aadhar address — because it helps us with public health planning and logistics."
+
+    Chatbot Question: "Have you tested positive for Covid-19 in the past 5 years?"
+    User Message: "Does this include suspected or only confirmed cases?"
+    Clarification: "This includes any time you tested positive, had symptoms, or a doctor told you that you had Covid—even if it wasn’t officially confirmed with a test."
+    Purpose: "It helps us understand your exposure history for epidemiological reporting."
+    CombinedClarification: "This includes any confirmed, suspected, or doctor-advised cases of Covid—even if not tested—because it helps us understand your exposure history for reporting."
+
+    Chatbot Question: "In which year did you last have Covid?"
+    User Message: "I’m not sure of the exact year, does it have to be precise?"
+    Clarification: "You can mention the most recent year you remember having Covid. If it happened more than once, the latest one is fine."
+    Purpose: "This helps us determine how recent your case was and understand potential immunity patterns."
+    CombinedClarification: "It’s okay if you don’t remember the exact year—just the most recent one you recall is fine, as it helps us track your recent Covid history and immunity patterns."
+
+    Chatbot Question: "Were you vaccinated the last time you had Covid?"
+    User Message: "Do you mean partially or fully vaccinated?"
+    Clarification: "We just want to know if you had received a Covid vaccine around the time you last had Covid. Some common vaccines were Pfizer, Moderna, Johnson & Johnson, AstraZeneca, and Sinovac."
+    Purpose: "This helps us study how vaccine timing affects Covid recovery."
+    CombinedClarification: "We’re asking whether you had received any Covid vaccine — like Pfizer or Covaxin — around the time of your infection, as it helps us study how vaccine timing affects recovery."
+
+    Chatbot Question: "Have you ever shown symptoms of Covid?"
+    User Message: "Do you want all symptoms or just the main ones?"
+    Clarification: "We’re mainly asking about your symptoms the last time you had Covid, like fever, cough, or loss of smell."
+    Purpose: "It helps us understand your experience and symptom profile."
+    CombinedClarification: "We’re mainly asking if you had symptoms like fever, cough, or loss of smell the last time you had Covid, since this helps us understand your experience and symptom profile."
+
+    Chatbot Question: "Have you ever been vaccinated for Covid?"
+    User Message: "Are you asking about all doses or just the first one?"
+    Clarification: "We’re just asking if you were vaccinated at the time of your last Covid infection."
+    Purpose: "This informs our data on vaccine uptake and protection coverage."
+    CombinedClarification: "We just want to know if you were vaccinated during your last Covid infection, since it helps us track vaccine uptake and protection coverage."
+    """
+    
     # System instructions for the decision agent
-    DECISION_SYSTEM_PROMPT = """You are an intelligent triage system that routes user queries to 
+    DECISION_SYSTEM_PROMPT_1 = """You are an intelligent triage system that routes user queries to 
     the appropriate specialized agent. Your job is to analyze the user's request and determine which agent 
     is best suited to handle it based on the query content, presence of images, and conversation context.
 
+    Use the chatbot’s current question, the user’s response, and the optional chat history.
+
+    Conversation snippet:
+    "{chat_log}"
+
     Available agents:
-    1. CONVERSATION_AGENT - For greetings, and any questions **not** falling into the other categories.
-    2. RAG_AGENT - For specific knowledge about covid.
-    3. MONGO_QUERY - For questions related to users personal information.
+    1. CONVERSATION_AGENT - For questions about the purpose of the interaction, or anything that doesn’t fit the other categories.
+    2. RAG_AGENT - For specific questions about COVID knowledge (e.g., symptoms, policy, vaccinations).
+    3. MONGO_QUERY - For questions about the user's personal information (e.g., symptom status, vaccine info they’ve given).
 
     You must provide your answer in JSON format with the following structure:
     {{
@@ -29,205 +601,42 @@ class AgentConfig:
     }}
     """
 
-    INTENT_CLASSIFIER_PROMPT = """You are an intent classification assistant.
-
-    Determine the user's intent based on the question they were asked and their response.
-
-    You will follow a step-by-step reasoning process:
-    1. Analyze what question was asked.
-    2. Interpret the user's response.
-    3. Determine how the response relates to the question (e.g., is it an answer, a denial, a question, a confirmation, etc.)
-    4. Choose the correct intent label based on reasoning.
-
-    Conversation snippet:
-    "{chat_log}"
-
-    Possible intent categories:
-
-    1. An *answer* — The user provides factual information (e.g., name, age, address, email).
-    Examples:
-    - "Rahul"
-    - "25 years"
-    - "My name is Priya"
-    - "I live in Ghaziabad"
-
-    2. A *query* — The user asks about Covid, the purpose of the call, or begins a new conversation.
-    Examples:
-    - "Tell me about covid"
-    - "What is this call for?"
-    - "Hi, how are you?"
-
-    3. *denial* — The user refuses to provide personal information.
-    Examples:
-    - "I prefer not to share that"
-    - "Why do you need this?"
-
-    4. *acceptance* — The user agrees to proceed, confirms permanent address, or affirms having Covid/vaccine in past.
-    Examples:
-    - "Yes"
-    - "Yes, this is my permanent address"
-    - "I had Covid back in 2021"
-
-    5. *repeat* — The user asks for the question to be repeated.
-    Examples:
-    - "Pardon?"
-    - "Can you repeat that?"
-
-    6. *negative* — The user declines to ask further questions when invited to.
-    Examples:
-    - "No"
-    - "No questions"
-
-    7. *Different address* — If asked “Is this your permanent address?” and user replies with:
-    - "No"
-    - "This is not my permanent address"
-
-    8. *no vaccine* — If asked about vaccination and user replies negatively.
-    Examples:
-    - "No, I wasn’t vaccinated"
-
-    9. *no covid* — If asked about past Covid history and user replies negatively.
-    Examples:
-    - "No, I didn’t have Covid"
-
-    IMPORTANT: If the user is asked “Is this your permanent address?” and replies “No”, the intent must be ‘Different address’, not ‘denial’.
-
-    ---
-
-    Now, follow this reasoning format step by step:
-
-    1. What was the question?
-    2. What was the user’s response?
-    3. Interpret the meaning of the response in context.
-    4. Decide which intent category this best fits.
-
-    Respond ONLY in the following JSON format:
-    {
-    "intent": "answer" | "query" | "denial" | "acceptance" | "repeat" | "negative" | "Different address" | "no vaccine" | "no covid"
-    }
-"""
-
     PURPOSE_CLASSIFIER_PROMPT = """
     You are a purpose classification assistant.
 
-    Context:
-    - The user was asked the following question:
-    "{question}"
-    - The user responded with:
-    "{user_input}"
+    Use the chat_log given below to have better understatnding of the conversation.
+
+    "{chat_log}"
 
     Instructions:
     1. If the user objects to the question or refuses to provide information:
-    - Your sole role is to politely explain the **purpose of data collection**.
-    - Clarify that the information is collected to **store user data in a database** to support **better governance by the government**.
+    - Your sole role is to politely explain the purpose of asking these questions.
+    - Clarify that the information is collected solely for the purpose of this survey, is stored securely, and is in full compliance with the Digital Personal Data Protection Rules, 2025 (Government of India).
+    - Inform the user that without answering this question, the survey cannot proceed or be completed.
 
-    Be empathetic, informative, and clear in your response.
-    """
+    Be empathetic, respectful, informative, and clear in your response.
 
-    SERIOUS_ClASSIFIER_PROMPT = """
-    You are a purpose classifier assistant.
+    Examples:
+
+    User: "I don’t want to answer this."  
+    Bot: "I understand. These questions help us improve our services. Your data is stored securely and follows the Digital Personal Data Protection Rules, 2025. Without this information, we won't be able to continue the survey."
+
+    User: "No, I won’t give any personal info."  
+    Bot: "I respect your concern. Your data is fully protected under India’s 2025 data protection laws. We won’t be able to complete the survey without your input."
+
+    User: "Not interested in sharing."  
+    Bot: "Understood. Just to clarify, this data helps us serve you better and is stored securely under government guidelines. Without your response, the survey can’t continue."
+
+    User: "I don’t trust this."  
+    Bot: "I hear you. Please know your data is handled safely and in line with the Digital Personal Data Protection Rules, 2025. We can only proceed if you're comfortable answering."
     
-    Context:
-    - The user was asked the following question:
-    "{question}"
-    - The user responded with:
-    "{user_input}"
+    User: "I don’t have time for this"  
+    Bot: "I understand. These questions help us improve our services. Your data is stored securely and follows the Digital Personal Data Protection Rules, 2025. Without this information, we won't be able to continue the survey."
 
-    Instruction:
-    The user is not serious about providing the answers to the question or it seems that the input provided are not satisafactory so you need to make him understand that this data collection process
-    is for government record and that proper data enhances governance.
+    User: "Call me later"  
+    Bot: "I understand. These questions help us improve our services. Your data is stored securely and follows the Digital Personal Data Protection Rules, 2025. Without this information, we won't be able to continue the survey."
+
     """
-
-    ANSWER_PROMPT = """
-        You are a judgment assistant. Your task is to determine whether the input provided by the user is satisfactory or not.
-
-        Context:
-        - The user was asked the following question:
-        "{question}"
-        - The user responded with:
-        "{user_input}"
-
-        Criteria for judging the response:
-
-        1. If the question is: "Can you please state your full name?"
-        - Responses like "123", "xyz", or anything that clearly cannot be interpreted as a real human name or provides only his first name are *not satisfactory*.
-
-        2. If the question is: "What is your age?"
-        - The age must be between *13 and 105* (inclusive). Any value outside this range is *not satisfactory*.
-        Example:
-        - "25"
-        - "26 years"
-        - "I am 36 years old"
-
-        3. If the question is: "Can you please provide your address?"
-        - The address refering to a city should be considered *satisfactory*.
-
-        4. If the question is: "What is your email address?"
-        - The email address should be valid and should end with a domain like *@gmail.com, *@yahoo.com*, *@outlook.com*, etc. Random strings or missing domains are **not satisfactory*.
-
-        Instructions:
-        - If the user input is satisfactory, return *"satisfactory"*.
-        - If the user input is not satisfactory, generate a contextual clarification based on the clarifications mentioned above and the user response on the question and ask the question again.
-
-        Respond ONLY in the following JSON format:
-            {
-            "intent": "satisfactory" | { clarification }
-            }
-        """
-
-    CLARIFICATION_PROMPT = """
-        You’re a friendly assistant here to help clarify questions when the user’s response isn’t clear or complete.
-
-        Context:
-        - You asked the user:
-        "{question}"
-        - The user replied:
-        "{user_input}"
-
-        Your job is to gently clarify what kind of answer you’re looking for. Try to make it easy for the user to understand what’s missing or what’s expected.
-
-        Here are some examples:
-
-        1. Question: "Could you please state your name?"
-        Clarification:
-        Just to clarify, we’re looking for your full name—first, middle (if you have one), and last—as it appears on your Aadhar card.
-
-        2. Question: "What is your age?"
-        Clarification:
-        Please share your age in years. Ideally, it should match what’s mentioned on your Aadhar card.
-
-        3. Question: "Could you please tell me your current home address?"
-        Clarification:
-        We’re looking for the address where you currently live—this might be different from your permanent or family home, and it’s okay if it’s not the one on your Aadhar card.
-
-        4. Question: "Have you tested positive for Covid-19 in the past 5 years?"
-        Clarification:
-        This includes any time you tested positive, had symptoms, or a doctor told you that you had Covid—even if it wasn’t officially confirmed with a test.
-
-        5. Question: "In which year did you last have Covid?"
-        Clarification:
-        You can mention the most recent year you remember having Covid. If it happened more than once, the latest one is fine.
-
-        6. Question: "Were you vaccinated the last time you had Covid?"
-        Clarification:
-        We just want to know if you had received a Covid vaccine around the time you last had Covid. Some common vaccines were Pfizer, Moderna, Johnson & Johnson, AstraZeneca, and Sinovac.
-
-        7. Question: "Have you ever shown symptoms of Covid?"
-        Clarification:
-        We’re mainly asking about your symptoms the last time you had Covid, like fever, cough, or loss of smell.
-
-        8. Question: "Have you ever been vaccinated for Covid?"
-        Clarification:
-        We’re just asking if you were vaccinated at the time of your last Covid infection.
-
-
-        Now, based on the user’s input, write a friendly clarification to help them give a better answer. End the clarification by repeating the original question.
-
-        Only respond in this format:
-        {
-        "intent": "your clarification here"
-        }
-        """
     
     QUERY_PROMPT = """
         You’re a friendly assistant here to help clarify the doubts of the user. 
