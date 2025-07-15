@@ -21,4 +21,4 @@ google.api_core
 google.cloud
 google-cloud-translate
 pydantic==2.9.2
-
+langgraph
