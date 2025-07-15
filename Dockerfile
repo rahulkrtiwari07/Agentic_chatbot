@@ -20,8 +20,8 @@ COPY . .
 ENV NAME venv
 
 #Expose the port on which the application form 
-EXPOSE 8001
+EXPOSE 8002
 
 
 ##Run the main.py when the container launches 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8002"]
