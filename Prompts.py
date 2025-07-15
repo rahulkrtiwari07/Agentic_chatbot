@@ -126,6 +126,15 @@ class AgentConfig:
     Use the following logic to decide the evaluation:
 
     1. ✅ If the user's answer is semantically or logically aligned with a reference answer → *satisfactory*
+
++    *Special case - full name questions*  
++    • If the chatbot question contains the words “full name” or “your name”,  
++      accept *any* answer that:
++         - consists of *≥ 2 space-separated alphabetic words*, and  
++         - each word starts with a letter (A-Z, a-z) and has ≥ 2 letters.  
++      Example valid patterns: “Sanjay Gupta”, “A. R. Rahman”, “Priya Devika Nair”.
++    • Do *not* compare such names to the reference list; the list is illustrative, not exhaustive.
+
     2. ❌ If the user's answer clearly contradicts or is irrelevant to the reference, or is out of expected bounds (e.g., invalid number) → *NOT satisfactory*
     3. ❓ If the user's answer is vague, informal, or ambiguous → *REQUIRES CLARIFICATION*
 
@@ -305,7 +314,13 @@ class AgentConfig:
     Evaluation: denial  
     Rationale: user replies negatively to the questions
 
-    ---
+    Example 15
+    Chatbot Question: "Could you please state your full name?"
+    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
+    User Response: "Sanjay Gupta"
+    Evaluation: satisfactory
+    Rationale: Two-part name supplied; meets the “full name” rule even though it is not in the reference list.
+        ---
     
     If the evaluation is satisafactory then return "satisfactory", if the evaluation is acceptance then return "acceptance", if the evaluation is denial then return "denial" or else if the evaluation is "NOT ACCEPTABLE" or "REQUIRES CLARIFICATION" then form a suitable expalation behind that using the rationale and return the "explanation".
     ---
@@ -504,8 +519,8 @@ class AgentConfig:
     Your job is to generate a clear, conversational response that addresses the user's clarification request. The response should:
     1. Explain the question clearly, based on the Clarification.
     2. Include the Purpose naturally, to explain why the question matters.
-    3. Adapt to the way the user has asked — whether it’s vague, formal, informal, or indirect.
-    4. Be polite, helpful, and brief (1–2 sentences).
+    3. Adapt to the way the user has asked — whether it's vague, formal, informal, or indirect.
+    4. Be polite, helpful, and brief (1-2 sentences).
     5. Use the chat history only if relevant to help interpret the user's intent more accurately.
 
     IMPORTANT:
@@ -518,7 +533,7 @@ class AgentConfig:
     ### Input
     Chat History: "<recent turns of conversation>"
     Chatbot Question: "<original chatbot question>"
-    User Message: "<user’s clarification-seeking response>"
+    User Message: "<user's clarification-seeking response>"
     Clarification: "<what the question is asking>"
     Purpose: "<why the question is being asked>"
 
@@ -576,30 +591,14 @@ class AgentConfig:
     Clarification: "We’re just asking if you were vaccinated at the time of your last Covid infection."
     Purpose: "This informs our data on vaccine uptake and protection coverage."
     CombinedClarification: "We just want to know if you were vaccinated during your last Covid infection, since it helps us track vaccine uptake and protection coverage."
+    
+    # -------------- NEW FALLBACK RULE --------------
+    If the user's clarification request is off-topic, nonsensical, or impossible to address logically, respond with a brief apology and ask them to rephrase:
+
+    CombinedClarification: "I’m sorry, I’m not sure I understand that. Could you please rephrase or ask something related to the survey question so I can help?"
+    # -----------------------------------------------
     """
     
-    # System instructions for the decision agent
-    DECISION_SYSTEM_PROMPT_1 = """You are an intelligent triage system that routes user queries to 
-    the appropriate specialized agent. Your job is to analyze the user's request and determine which agent 
-    is best suited to handle it based on the query content, presence of images, and conversation context.
-
-    Use the chatbot’s current question, the user’s response, and the optional chat history.
-
-    Conversation snippet:
-    "{chat_log}"
-
-    Available agents:
-    1. CONVERSATION_AGENT - For questions about the purpose of the interaction, or anything that doesn’t fit the other categories.
-    2. RAG_AGENT - For specific questions about COVID knowledge (e.g., symptoms, policy, vaccinations).
-    3. MONGO_QUERY - For questions about the user's personal information (e.g., symptom status, vaccine info they’ve given).
-
-    You must provide your answer in JSON format with the following structure:
-    {{
-    "agent": "AGENT_NAME",
-    "reasoning": "Your step-by-step reasoning for selecting this agent",
-    "confidence": 0.95  // Value between 0.0 and 1.0 indicating your confidence in this decision
-    }}
-    """
 
     PURPOSE_CLASSIFIER_PROMPT = """
     You are a purpose classification assistant.
@@ -672,6 +671,11 @@ class AgentConfig:
 
         Question: "Which address do you need" or "I have multiple addresses which one do you need"
         Response: "We required the address that is registered in your government Id."
+
+        # -------------- NEW FALLBACK RULE --------------
+        Question: [Any query that has no logical or factual answer, or is completely unrelated]
+        Response: I’m sorry, I don’t have enough information to answer that. Could you please rephrase or ask something related to the survey?
+        # -----------------------------------------------
         """
     
     INFORMATION_EXTRACT_PROMPT = """
