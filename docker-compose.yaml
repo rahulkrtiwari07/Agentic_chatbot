@@ -1,7 +1,7 @@
 services:
   api:
     build: .
-    container_name: stream_api
+    container_name: agent
     ports:
       - "8002:8002"
     restart: always
@@ -23,7 +23,7 @@ services:
       
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
-    container_name: elasticsearch_stream
+    container_name: elasticsearch_agent
     environment:
       - node.name=elasticsearch
       - discovery.type=single-node
@@ -45,7 +45,7 @@ services:
 
   mongo:
     image: mongo:6
-    container_name: mongodb_stream
+    container_name: mongodb_agent
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
