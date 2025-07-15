@@ -49,7 +49,7 @@ class Retrieval:
 
     def __init__(self, es_pass, index_name="trial"):
         es = Elasticsearch(
-            "http://164.52.194.17:9300",
+            "http://164.52.194.17:9200",
             basic_auth=('elastic', es_pass),
             request_timeout=60,
             verify_certs=False,

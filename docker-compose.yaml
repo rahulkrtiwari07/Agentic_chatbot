@@ -40,7 +40,7 @@ services:
     volumes:
     - es_data:/usr/share/elasticsearch/data
     ports:
-      - "9300:9300"
+      - "9201:9200"
     restart: always 
 
   mongo:
