@@ -1,16 +1,16 @@
 {
-  "8dc5c2d0-e49e-42f5-9336-2fc2a1565f0f": [
+  "3793577a-ada8-4c9f-aba7-b8b52609250c": [
     {
       "role": "bot",
       "message": "Welcome! Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     },
     {
       "role": "user",
-      "message": "no"
+      "message": "start123"
     },
     {
       "role": "bot",
-      "message": "I understand. These questions help us improve our services. Your data is stored securely and follows the Digital Personal Data Protection Rules, 2025. Without this information, we won't be able to continue the survey.\nCould you please reconsider starting with a few questions?"
+      "message": "Welcome! Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     }
   ]
 }

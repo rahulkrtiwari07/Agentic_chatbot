@@ -432,7 +432,7 @@ class IntentRouter:
 
         # Handle initial welcome interaction
         if not state.get("welcomed", False):
-            if not input_text:
+            if input_text == "start123":
                 return {
                     "status": "welcome",
                     "message": f"Welcome! {AgentConfig.WELCOME_MESSAGE}",
@@ -860,7 +860,7 @@ async def chat_loop():
     session_id = None
 
     # Start conversation
-    response = await router.run(input_text=None, session_id=session_id)
+    response = await router.run(input_text="start123", session_id=session_id)
     session_id = response.get("session_id", session_id)
 
     if response.get("status") == "welcome":
