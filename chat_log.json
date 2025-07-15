@@ -1,32 +1,16 @@
 {
-  "57392284-d142-46ac-92c5-c09c5fc86584": [
+  "8dc5c2d0-e49e-42f5-9336-2fc2a1565f0f": [
     {
-      "role": "user",
-      "message": "ok"
+      "role": "bot",
+      "message": "Welcome! Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     },
     {
       "role": "user",
-      "message": "are you a robot"
+      "message": "no"
     },
     {
-      "role": "user",
-      "message": "ok sorry yes"
-    },
-    {
-      "role": "user",
-      "message": "ok yes yes i am telling you its rahul"
-    },
-    {
-      "role": "user",
-      "message": "my name is rahul"
-    },
-    {
-      "role": "user",
-      "message": "can you give me an example"
-    },
-    {
-      "role": "user",
-      "message": "who are you"
+      "role": "bot",
+      "message": "I understand. These questions help us improve our services. Your data is stored securely and follows the Digital Personal Data Protection Rules, 2025. Without this information, we won't be able to continue the survey.\nCould you please reconsider starting with a few questions?"
     }
   ]
 }

@@ -392,7 +392,7 @@ class IntentRouter:
         builder.add_node("mongo_query", self.mongo_query)
         builder.add_node("general_agent", self.general_agent)
         builder.add_node("unknown_intent_handler", self.unknown_intent_handler)
-        builder.add_node("purpose_classifier", self.purpose_classifier)
+        #builder.add_node("purpose_classifier", self.purpose_classifier)
 
         # Entry point
         builder.set_entry_point("route_agent")
