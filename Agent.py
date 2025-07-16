@@ -435,7 +435,7 @@ class IntentRouter:
             if input_text == "start123":
                 return {
                     "status": "welcome",
-                    "message": f"Welcome! {AgentConfig.WELCOME_MESSAGE}",
+                    "message": f"{AgentConfig.WELCOME_MESSAGE}",
                     "session_id": session_id
                 }
 
@@ -765,7 +765,7 @@ class IntentRouter:
                         "session_id": session_id
                     }
                 
-                if current_key == "Query" and intent == "query":
+                '''if current_key == "Query" and intent == "query":
                     state["current_key"] = "Query"
                     email = answers.get("email", "default@example.com")
                     self.session_manager.update_state(session_id, state)
@@ -780,16 +780,16 @@ class IntentRouter:
                         "status": "Queries",
                         "message": response_text + "\n Any more questions?",
                         "session_id": session_id
-                    }
+                    }'''
 
-                if current_key == "Query" and intent == "negative":
+                '''if current_key == "Query" and intent == "negative":
                     return {
                         "status": "ended",
                         "message": "No problem. Feel free to return anytime. Goodbye!",
                         "session_id": session_id
-                    }
+                    }'''
 
-                elif intent == "query":
+                if intent == "query":
                     email = answers.get("email", "default@example.com")
                     self.session_manager.update_state(session_id, state)
                     response = await self.graph.ainvoke({

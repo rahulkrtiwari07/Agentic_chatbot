@@ -1,16 +1,8 @@
 {
-  "33de33ec-2b2e-4a3c-a1f3-005015b50d9f": [
+  "fc37cfe8-cdda-494b-a7e7-b1027cc31796": [
     {
       "role": "bot",
-      "message": "Welcome! Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
-    },
-    {
-      "role": "user",
-      "message": "I don't have time for this"
-    },
-    {
-      "role": "bot",
-      "message": "I understand. These questions help us improve our services. Your data is stored securely and follows the Digital Personal Data Protection Rules, 2025. Without this information, we won't be able to continue the survey.\nCould you please reconsider starting with a few questions?"
+      "message": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     },
     {
       "role": "user",
@@ -26,15 +18,7 @@
     },
     {
       "role": "bot",
-      "message": "Hi! Thanks for letting me know. We're looking for your full name \u2014 first and last. Your response 'my name is alex' does not consist of at least two space-separated alphabetic words where each word starts with a letter and has at least two letters. Please provide your full name like 'John Doe' or 'Alice Smith'."
-    },
-    {
-      "role": "user",
-      "message": "my name is alex sharme"
-    },
-    {
-      "role": "bot",
-      "message": "Hi! Thanks for sharing your name. We're looking for your full name \u2014 first and last. The response should consist of at least two space-separated alphabetic words, where each word starts with a letter and has at least two letters. For example, 'Alex Sharma' would be a suitable response. Can you please provide your full name in this format?"
+      "message": "Hi there! Thanks for sharing your name, but we're looking for your full name \u2014 first and last. Please provide a response with at least two space-separated alphabetic words, each starting with a letter and having at least two letters. For example, 'Alex Johnson' or 'Emily Brown'."
     },
     {
       "role": "user",
@@ -43,38 +27,6 @@
     {
       "role": "bot",
       "message": "What is your age?"
-    },
-    {
-      "role": "user",
-      "message": "why do you need my age"
-    },
-    {
-      "role": "bot",
-      "message": "I\u2019m sorry, I don\u2019t have enough information to answer that. Could you please rephrase or ask something related to the survey?\nCould you please reconsider answering this question?\nWhat is your age?"
-    },
-    {
-      "role": "user",
-      "message": "25 years old"
-    },
-    {
-      "role": "bot",
-      "message": "What is your address?"
-    },
-    {
-      "role": "user",
-      "message": "i currently live in delhi"
-    },
-    {
-      "role": "bot",
-      "message": "Is this your permanent address"
-    },
-    {
-      "role": "user",
-      "message": "yes"
-    },
-    {
-      "role": "bot",
-      "message": "Thanks for the clarification.\nHave you have covid in the past 5 years?"
     }
   ]
 }
