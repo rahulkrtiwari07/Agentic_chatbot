@@ -129,7 +129,7 @@ class AgentConfig:
 
 +    *Special case - full name questions*  
 +    • If the chatbot question contains the words “full name” or “your name”,  
-+      accept *any* answer that:
++      accept *any* answer as satisfactory that:
 +         - consists of *≥ 2 space-separated alphabetic words*, and  
 +         - each word starts with a letter (A-Z, a-z) and has ≥ 2 letters.  
 +      Example valid patterns: “Sanjay Gupta”, “A. R. Rahman”, “Priya Devika Nair”.
@@ -359,15 +359,15 @@ class AgentConfig:
 
         """
     
-    DECISION_SYSTEM_PROMPT = """
+    DECISION_SYSTEM_PROMPT =  """
         You are a *Query intent subclassifier*.
 
         The user's response has already been recognised as a *Query. Your task is to determine which *subtype of Query it is:
 
-        * *Query\:Clarification* — The user asks for clarification about the chatbot’s current question or any earlier question in the same conversation.
-        * *Query\:PersonalInfo* — The user asks what personal data the system already stores about them (e.g. name, age, phone number, location, address, or e‑mail).
-        * *Query\:Topic* — The user requests Covid‑related facts, guidance, or information that should be answered through the Covid RAG knowledge source.
-        * *Query\:General* — Any other question, such as asking about us, the reason/purpose of the call, or anything that doesn’t match the above sub‑intents.
+        * *Query:Clarification* — The user asks for clarification about the chatbot’s current question or any earlier question in the same conversation.
+        * *Query:PersonalInfo* — The user asks what personal data the system already stores about them (e.g. name, age, phone number, location, address, or e‑mail).
+        * *QueryTopic* — The user requests Covid‑related facts, guidance, or information that should be answered through the Covid RAG knowledge source.
+        * *Query:General* — Any other question, such as asking about us, the reason/purpose of the call, or anything that doesn’t match the above sub‑intents.
 
         ---
 
