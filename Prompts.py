@@ -126,15 +126,6 @@ class AgentConfig:
     Use the following logic to decide the evaluation:
 
     1. ✅ If the user's answer is semantically or logically aligned with a reference answer → *satisfactory*
-
-+    *Special case - full name questions*  
-+    • If the chatbot question contains the words “full name” or “your name”,  
-+      accept *any* answer as satisfactory that:
-+         - consists of *≥ 2 space-separated alphabetic words*, and  
-+         - each word starts with a letter (A-Z, a-z) and has ≥ 2 letters.  
-+      Example valid patterns: “Sanjay Gupta”, “A. R. Rahman”, “Priya Devika Nair”.
-+    • Do *not* compare such names to the reference list; the list is illustrative, not exhaustive.
-
     2. ❌ If the user's answer clearly contradicts or is irrelevant to the reference, or is out of expected bounds (e.g., invalid number) → *NOT satisfactory*
     3. ❓ If the user's answer is vague, informal, or ambiguous → *REQUIRES CLARIFICATION*
 
@@ -142,7 +133,6 @@ class AgentConfig:
     - For *age, only values between **12 and 103 (inclusive)* are acceptable.
     - For *yes/no questions, if both "Yes" and "No" are logically acceptable or allowed in the reference list, either is **ACCEPTABLE*.
     - If unsure, prefer *REQUIRES CLARIFICATION* over incorrect rejection.
-
     ---
 
     --------------------------------------------------------------------
@@ -320,6 +310,34 @@ class AgentConfig:
     User Response: "Sanjay Gupta"
     Evaluation: satisfactory
     Rationale: Two-part name supplied; meets the “full name” rule even though it is not in the reference list.
+
+    Example 16
+    Chatbot Question: "Could you please state your full name?"
+    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
+    User Response: "Ajay"
+    Evaluation: REQUIRES CLARIFICATION
+    Rationale: Only one name part provided; a full name requires at least two name parts.
+
+    Example 17
+    Chatbot Question: "Could you please state your full name?"
+    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
+    User Response: "R. Gupta"
+    Evaluation: satisfactory
+    Rationale: Contains two name parts; abbreviations are allowed as long as the format follows two or more words.
+    
+    Example 18
+    Chatbot Question: "Could you please state your full name?"
+    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
+    User Response: "K. Singh"
+    Evaluation: satisfactory
+    Rationale: Two name parts supplied; format is acceptable as per the full name rule.
+    
+    Example 19
+    Chatbot Question: "Could you please state your full name?"
+    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
+    User Response: "Priya"
+    Evaluation: REQUIRES CLARIFICATION
+    Rationale: Single name part given; clarification required for full name.
         ---
     
     If the evaluation is satisafactory then return "satisfactory", if the evaluation is acceptance then return "acceptance", if the evaluation is denial then return "denial" or else if the evaluation is "NOT ACCEPTABLE" or "REQUIRES CLARIFICATION" then form a suitable expalation behind that using the rationale and return the "explanation".

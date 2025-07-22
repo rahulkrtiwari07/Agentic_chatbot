@@ -17,7 +17,7 @@ from Prompts import AgentConfig
 from mongooperations import get_mongo_client, store_user_data
 from extract_mongo import retrieve_data
 
-from stream import Retrieval  # Make sure this exists and is implemented
+from stream_lance import Retrieval  # Make sure this exists and is implemented
 
 from uuid import uuid4
 from dotenv import load_dotenv
@@ -64,7 +64,8 @@ class IntentRouter:
         self.azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-35-turbo")
 
         # Set up retrieval
-        self.retrieval = Retrieval(es_pass=self.es_pass)
+        #self.retrieval = Retrieval(es_pass=self.es_pass)
+        self.retrieval = Retrieval()
         self.retriever = self.retrieval.retrieve_data()
 
         self.questions = [

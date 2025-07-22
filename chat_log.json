@@ -1,5 +1,5 @@
 {
-  "fc37cfe8-cdda-494b-a7e7-b1027cc31796": [
+  "cea03512-dfd0-4271-8ef6-8e143900a9e7": [
     {
       "role": "bot",
       "message": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
@@ -14,19 +14,19 @@
     },
     {
       "role": "user",
-      "message": "my name is alex"
+      "message": "What is covid"
     },
     {
       "role": "bot",
-      "message": "Hi there! Thanks for sharing your name, but we're looking for your full name \u2014 first and last. Please provide a response with at least two space-separated alphabetic words, each starting with a letter and having at least two letters. For example, 'Alex Johnson' or 'Emily Brown'."
+      "message": "COVID-19, also known as coronavirus disease 2019, is an illness caused by the virus SARS-CoV-2. It spreads primarily through respiratory droplets when an infected person coughs, sneezes, talks, or breathes. The virus can also spread by touching surfaces contaminated with the virus and then touching the face. Symptoms can range from mild to severe and may include fever, cough, shortness of breath, fatigue, muscle aches, loss of taste or smell, and more. It is important to follow preventive measures such as wearing masks, practicing social distancing, and getting vaccinated to reduce the spread of the virus.\nCould you please reconsider answering this question?\nCould you please state your full name?"
     },
     {
       "role": "user",
-      "message": "my name is alex sharma"
+      "message": "Rahul"
     },
     {
       "role": "bot",
-      "message": "What is your age?"
+      "message": "Hi there! Thanks for providing your name. We are looking for your full name with both first and last names. Could you please provide both your first and last names, like 'Rahul Gupta'? This will help us update our records accurately. Thank you!"
     }
   ]
 }
