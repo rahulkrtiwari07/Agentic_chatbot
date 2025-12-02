@@ -13,7 +13,7 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain_openai import AzureChatOpenAI
 from langchain_core.callbacks import StreamingStdOutCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
-from Prompts import AgentConfig
+from Prompts1 import AgentConfig
 
 from mongooperations import get_mongo_client, store_user_data
 from extract_mongo import retrieve_data
@@ -25,6 +25,8 @@ from dotenv import load_dotenv
 
 from fastapi.responses import StreamingResponse
 
+from questions import QUESTIONS
+
 mongo_uri = os.getenv('MONGO_URL')
 database_name = "chat_db"
 collection_name = "user_data"
@@ -35,23 +37,46 @@ print(mongo_client)
 
 load_dotenv('.env.example')
 
+from uuid import uuid4
+
 class SessionManager:
     def __init__(self):
         self.sessions = {}
 
-    def create_session(self):
+    def create_session(self, questions=None):
         session_id = str(uuid4())
-        self.sessions[session_id] = {"answers": {}, "current_key": None}
+        if questions:
+            first_key, first_question = questions[0]
+        else:
+            first_key, first_question = None, None
+
+        self.sessions[session_id] = {
+            "answers": {},
+            "current_key": first_key,
+            "current_question": first_question,
+            "welcomed": False,
+            "negative_count": 0
+        }
         return session_id
 
     def get_state(self, session_id):
-        return self.sessions.get(session_id, {"answers": {}, "current_key": None, "welcomed": False})
+        return self.sessions.get(
+            session_id,
+            {
+                "answers": {},
+                "current_key": None,
+                "current_question": None,
+                "welcomed": False
+            }
+        )
 
     def update_state(self, session_id, state):
         self.sessions[session_id] = state
 
     def has_session(self, session_id):
         return session_id in self.sessions
+
+
 
 
 class IntentRouter:
@@ -69,20 +94,7 @@ class IntentRouter:
         self.retrieval = Retrieval()
         self.retriever = self.retrieval.retrieve_data()
 
-        self.questions = [
-            ("name", "Could you please state your full name?"),
-            ("age", "What is your age?"),
-            ("address", "What is your address?"),
-            ("Confirm address", "Is this your permanent address"),
-            ("Permanent address", "Please let meknow your permanent address"),
-            ("covid", "Have you have covid in the past 5 years?"),
-            ("Year", "In which year did you last have covid"),
-            ("vaccinated","Were you vaccinated at that time"),
-            ("No covid", "Have you ever shown symptons of covid"),
-            ("Vaccination before", "Have you ever been vaccinated for Covid?"),
-            ("email", "What is your email address?"),
-            ("Thanks", "Thank you! Feel free to ask if you have any questions.")
-        ]
+        self.questions = QUESTIONS
 
 
         self.log_path = "interaction.docx"
@@ -97,7 +109,7 @@ class IntentRouter:
             streaming=False,
             max_retries=2,
         )'''
-        self.url = "http://164.52.193.73:8900/chat"
+        self.url = "http://164.52.193.73:9000/v1/chat/completions"
 
         '''self.url = ChatOpenAI(
             model="/model_weights/snapshots/093f9f388b31de276ce2de164bdc2081324b9767",
@@ -134,43 +146,46 @@ class IntentRouter:
 
         try:
             response = requests.post(self.url, json=payload)
-            #print("[DEBUG] Route agent raw output:", response.text)
             response.raise_for_status()
             data = response.json()
 
-            # Extract assistant response content
+            # --- Extract model output ---
             content = data["choices"][0]["message"]["content"].strip()
 
-            # Remove markdown code fences if present
-            cleaned = re.sub(r"^(?:json)?\s*|\s*$", "", content.strip(), flags=re.DOTALL).strip()
+            # --- Clean potential markdown wrappers ---
+            # Removes leading/trailing backticks like ```json ... ```
+            content = re.sub(r"^```(?:json)?|```$", "", content.strip())
 
-            # Replace newlines inside JSON strings (common model issue)
-            fixed_json = re.sub(r'(?<!\\)\n', ' ', cleaned)
+            # --- Fix newline issues inside JSON ---
+            # Replace unescaped newlines (common hallucination) with spaces
+            content = re.sub(r'(?<!\\)\n', ' ', content)
 
-            # Try parsing JSON
+            # Try JSON parsing
             try:
-                decision = json.loads(fixed_json)
-            except json.JSONDecodeError as e:
-                logging.warning(f"Route agent JSON parse failed. Cleaned content: {cleaned}")
+                decision = json.loads(content)
+            except json.JSONDecodeError:
+                logging.warning(f"Route agent failed to parse JSON.\nRaw content: {content}")
                 decision = {
                     "agent": "parse_error_fallback_agent",
-                    "reasoning": f"Invalid JSON from LLM: {cleaned}",
+                    "reasoning": f"Invalid JSON from LLM: {content}",
                     "confidence": 0.0
                 }
 
-            # Confidence check
+            # --- Confidence gating ---
             if decision.get("confidence", 0) < AgentConfig.CONFIDENCE_THRESHOLD:
                 decision["agent"] = "low_confidence_fallback_agent"
 
         except Exception as e:
-            logging.warning(f"Route agent error: {e}")
+            logging.warning(f"Route agent request error: {e}")
             decision = {
                 "agent": "parse_error_fallback_agent",
                 "reasoning": f"Request failed: {e}",
                 "confidence": 0.0
             }
 
+        # Merge with state for LangGraph
         return {**state, **decision}
+
     
     def format_chat_log(self, chat_log):
         if not chat_log:
@@ -261,6 +276,7 @@ class IntentRouter:
 
     
     def classify_answer(self, user_input, question=None):
+        print(question)
         messages = [
             {"role": "system", "content": AgentConfig.ANSWER_PROMPT},
             {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
@@ -310,52 +326,7 @@ class IntentRouter:
             logging.warning(f"Answer classification error: {e}")
 
         return value
-    
 
-
-    def information_extract(self, chat_history):
-        messages = [
-            {"role": "system", "content": AgentConfig.INFORMATION_EXTRACT_PROMPT.format(chat_history=chat_history)}
-        ]
-
-        payload = {
-            "messages": messages,
-            "temperature": 0,
-            "max_tokens": 500
-        }
-
-        try:
-            start_time = time.time()
-            response = requests.post(self.url, json=payload)
-            end_time = time.time()
-
-            print("Time taken:", end_time - start_time)
-            print("[DEBUG] Extracted information raw output:", response.text)
-
-            response.raise_for_status()
-            data = response.json()
-
-            # Extract assistant content
-            content = data["choices"][0]["message"]["content"]
-
-            # Try to parse JSON block
-            extracted_info = {}
-            match = re.search(r"\{.*\}", content, re.DOTALL)
-            if match:
-                try:
-                    extracted_info = json.loads(match.group(0))
-                except Exception as e:
-                    logging.warning(f"JSON parse failed, fallback to raw text: {e}")
-                    extracted_info = {"raw_text": content}
-            else:
-                # No JSON found, just return raw text
-                extracted_info = {"raw_text": content}
-
-            return extracted_info
-
-        except Exception as e:
-            logging.warning(f"Information extraction error: {e}")
-            return {}
 
 
 
@@ -420,6 +391,8 @@ class IntentRouter:
             "status": "complete",
             "answers": answers
         }
+
+    
     def greeting(self, user_input, question):
         print("greeting")
 
@@ -673,6 +646,20 @@ class IntentRouter:
         })
 
         return builder.compile()
+    
+    def move_to_next_question(self, state):
+        keys = [k for k, _ in self.questions]
+        if state["current_key"] in keys:
+            idx = keys.index(state["current_key"])
+            if idx + 1 < len(keys):
+                next_key, next_question = self.questions[idx + 1]
+                state["current_key"] = next_key
+                state["current_question"] = next_question
+            else:
+                # No more questions
+                state["current_key"] = None
+                state["current_question"] = None
+        return state
 
     async def run(self, input_text=None, has_image=False, session_id=None):
         # Initialize session manager if not already done
@@ -681,13 +668,12 @@ class IntentRouter:
 
         # Create a new session if none provided
         if session_id is None or not self.session_manager.has_session(session_id):
-            session_id = self.session_manager.create_session()
+            session_id = self.session_manager.create_session(questions=self.questions)
 
         # Load session state
         state = self.session_manager.get_state(session_id)
         answers = state.get("answers", {})
         state["answers"] = answers
-
         state["session_id"] = session_id
 
         # Handle initial welcome interaction
@@ -699,398 +685,166 @@ class IntentRouter:
                     "session_id": session_id
                 }
 
-            # Classify intent of reply to welcome message
             intent = self.classify_intent(input_text, AgentConfig.WELCOME_MESSAGE)
-            
             state["negative_count"] = state.get("negative_count", 0)
 
-            if intent in ("denial"):
+            if intent == "denial":
                 state["negative_count"] += 1
-
                 if state["negative_count"] >= 2:
-                
                     return {
                         "status": "ended",
                         "message": "I understand. Thank you for taking the time to talk to me. Goodbye",
                         "session_id": session_id
                     }
-                explanation = await self.purpose_classifier(input_text, "May I ask you a few questions to better assist you?")
+                explanation = await self.purpose_classifier(
+                    input_text,
+                    "May I ask you a few questions to better assist you?"
+                )
                 return {
                     "status": "denial",
                     "message": explanation + "\nCould you please reconsider starting with a few questions?",
                     "session_id": session_id
                 }
-            
-            if intent in ("query"):
+
+            if intent == "query":
                 email = answers.get("email", "default@example.com")
                 self.session_manager.update_state(session_id, state)
-                current_question = dict(self.questions).get("name", "")
                 response = await self.graph.ainvoke({
                     "input": input_text,
                     "has_image": has_image,
                     "email": email
                 })
                 response_text = response.get("response", "")
-                response["session_id"] = session_id
                 return {
                     "status": "questioning",
                     "message": response_text + "\nCan we start with the survey now?\n",
                     "session_id": session_id
                 }
-            
-            if intent in ("greeting"):
+
+            if intent == "greeting":
                 self.session_manager.update_state(session_id, state)
                 response_text = self.greeting(input_text, chat_log)
                 return {
                     "status": "questioning",
-                    "message": response_text + "should we start with the survey?",
+                    "message": response_text + " Should we start with the survey?",
                     "session_id": session_id
                 }
 
-            if intent in ("answer"):
+            if intent == "answer":
                 state["welcomed"] = True
                 self.session_manager.update_state(session_id, state)
                 response = await self.interact(state)
                 response["session_id"] = session_id
                 return response
-            else:
-                return {
-                    "status": "unclear_input",
-                    "message": "I couldn't understand that. Would you like to begin with a few questions to help guide our conversation?",
-                    "session_id": session_id
-                }
 
+            return {
+                "status": "unclear_input",
+                "message": "I couldn't understand that. Would you like to begin with a few questions to help guide our conversation?",
+                "session_id": session_id
+            }
 
-        # Handle personal information collection
-        if len(answers) < len(self.questions):
+        # Main survey flow
+        current_key = state.get("current_key")
+        current_question = state.get("current_question")
+
+        if current_key is not None:
+            print("Current question:", current_question)
+
             if input_text:
-                current_key = state.get("current_key")
-                print(current_key)
-                current_question = dict(self.questions).get(current_key, "")
                 intent = self.classify_intent(input_text, current_question, chat_log)
 
-                if intent == "answer" and current_key in ["name", "age", "address", "email", "Permanent address"] :
-                    intent1 = self.classify_answer(input_text, current_question)
-                    #print("intent1 output:", intent1)
-                    if intent1 == "satisfactory":
+                if intent == "answer":
+                    answer_validity = self.classify_answer(input_text, current_question)
+                    print("answer validity:", answer_validity)
+                    if answer_validity == "satisfactory":
+                        # Save answer
                         answers[current_key] = input_text
                         state["answers"] = answers
+
+                        # Move to next question
+                        state = self.move_to_next_question(state)
                         self.session_manager.update_state(session_id, state)
 
-                        chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
-                        }
-                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-
-                        if current_key == "email":
-                            state["current_key"] = "Thanks"
-                            self.session_manager.update_state(session_id, state)
-                            next_question = dict(self.questions).get("Thanks", "")
+                        next_question = state.get("current_question")
+                        if next_question:
                             return {
-                                "status": "ready_for_questions",
-                                "message": next_question,
+                                "status": "awaiting_input",
+                                "message": f"Next question:\n{next_question}",
+                                "session_id": session_id
+                            }
+                        else:
+                            return {
+                                "status": "completed",
+                                "message": "Thank you for completing the survey!",
                                 "session_id": session_id
                             }
 
-                        response = await self.interact(state)
-                        response["session_id"] = session_id
-                        return response
-                    else :
-                        clarification = intent1
+                    else:
+                        # Repeat same question
+                        self.session_manager.update_state(session_id, state)
                         return {
-                                "status": "ready_for_questions",
-                                "message": intent1,
-                                "session_id": session_id
-                            }
-                
-                if intent in ("greeting"):
+                            "status": "repeat",
+                            "message": f"{answer_validity} Ok, let's try that again:\n{current_question}",
+                            "session_id": session_id
+                        }
+
+                elif intent == "greeting":
                     self.session_manager.update_state(session_id, state)
                     response_text = self.greeting(input_text, chat_log)
                     return {
-                        "status": "Queries",
-                        "message": response_text,
+                        "status": "questioning",
+                        "message": f"{response_text} \n  + {current_question}",
                         "session_id": session_id
                     }
 
-                if current_key == "Confirm address":
-                    intent1 = self.classify_answer(input_text, current_question) 
-                    print(intent1)
-                    if intent1 == "acceptance":
-                        state["current_key"] = "covid"
-                        self.session_manager.update_state(session_id, state)
-                        next_question = dict(self.questions).get("covid", "")
-                        chat_entry = {
-                                "question": current_question,
-                                "answer": input_text
-                            }
-                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                        return {
-                            "status": "correct address",
-                            "message": "Thanks for the clarification.\n" + next_question,
-                            "session_id": session_id
-                        }
-                    
-                    if intent1 == "denial":
-                        state["current_key"] = "Permanent address"
-                        self.session_manager.update_state(session_id, state)
-                        next_question = dict(self.questions).get("Permanent address", "")
-                        chat_entry = {
-                                "question": current_question,
-                                "answer": input_text
-                            }
-                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                        return {
-                            "status": "correct address",
-                            "message": "Thanks for the clarification.\n" + next_question,
-                            "session_id": session_id
-                        }
-
-                if current_key == "covid":
-                    intent1 = self.classify_answer(input_text, current_question) 
-                    print(intent1)
-                    if intent1 == "acceptance":
-                        state["current_key"] = "Year"
-                        self.session_manager.update_state(session_id, state)
-                        next_question = dict(self.questions).get("Year", "")
-                        chat_entry = {
-                                "question": current_question,
-                                "answer": input_text
-                            }
-                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                        return {
-                            "status": "correct address",
-                            "message": "Thanks for the clarification.\n" + next_question,
-                            "session_id": session_id
-                        }
-                    
-                    if intent1 == "denial":
-                        state["current_key"] = "No covid"
-                        self.session_manager.update_state(session_id, state)
-                        next_question = dict(self.questions).get("No covid", "")
-                        chat_entry = {
-                                "question": current_question,
-                                "answer": input_text
-                            }
-                        #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                        return {
-                            "status": "correct address",
-                            "message": "Thanks for the clarification.\n" + next_question,
-                            "session_id": session_id
-                        }
-
-                if current_key == "Year" and intent == "answer":
-                    state["current_key"] = "vaccinated"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("vaccinated", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
-                        }
-                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
+                elif intent == "repeat":
                     return {
-                        "status": "Covid positive",
-                        "message": next_question,
+                        "status": "questioning",
+                        "message": f"Here is the question again:\n{current_question}",
                         "session_id": session_id
                     }
 
-                if current_key == "vaccinated" and intent == "answer":
-                    state["current_key"] = "email"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("email", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
-                        }
-                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "Covid positive",
-                        "message": next_question,
-                        "session_id": session_id
-                    }
-                
-                if current_key == "No covid" and intent == "answer":
-                    state["current_key"] = "Vaccination before"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("Vaccination before", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
-                        }
-                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "Covid negative",
-                        "message": next_question,
-                        "session_id": session_id
-                    }
-
-                if current_key == "Vaccination before" and intent == "answer":
-                    state["current_key"] = "email"
-                    self.session_manager.update_state(session_id, state)
-                    next_question = dict(self.questions).get("email", "")
-                    chat_entry = {
-                            "question": current_question,
-                            "answer": input_text
-                        }
-                    #store_user_data(mongo_client, database_name, collection_name, session_id, chat_entry)
-                    return {
-                        "status": "Covid negative",
-                        "message": next_question,
-                        "session_id": session_id
-                    }
-
-                if intent == "denial" and current_key not in ["Thanks"]:
-                    explanation = await self.purpose_classifier(input_text, current_question)
-                    return {
-                        "status": "denial",
-                        "message": explanation + "\nCould you please reconsider answering this question?\n" + current_question,
-                        "session_id": session_id
-                    }
-
-                if intent == "repeat":
-                    return {
-                        "status": "repeat",
-                        "message": f"Ok, I understand, here is the question again:\n{current_question}",
-                        "session_id": session_id
-                    }
-                
-                if intent in ("denial"):
+                elif intent == "denial":
                     state["negative_count"] += 1
-
                     if state["negative_count"] >= 2:
-                    
                         return {
                             "status": "ended",
                             "message": "I understand. Thank you for taking the time to talk to me. Goodbye",
                             "session_id": session_id
                         }
-                    explanation = await self.purpose_classifier(input_text, "May I ask you a few questions to better assist you?")
+                    explanation = await self.purpose_classifier(
+                        input_text,
+                        "May I ask you a few questions to better assist you?"
+                    )
                     return {
                         "status": "denial",
-                        "message": explanation + "\nCould you please reconsider starting with a few questions?",
+                        "message": explanation + "\nCould you please reconsider answering this question?",
                         "session_id": session_id
                     }
 
-                if current_key == "Thanks" and intent == "denial":
-                    '''data = retrieve_data(mongo_client, database_name, session_id)
-
-                   # Safely extract chat_history
-                    try:
-                        chat = data['user_data'][0]['chat_history']
-                    except (KeyError, IndexError) as e:
-                        logging.warning(f"Failed to retrieve chat_history: {e}")
-                        chat = []
-
-                    # Proceed only if chat is not empty
-                    if chat:
-                        extract = self.information_extract(chat)
-                        #print(extract)
-                    else:
-                        print("No chat history found for this session.")
-
-                    chat_entry = {"chat_history": extract
-                            } 
-                    store_user_data(mongo_client, database_name, collection_name_1, session_id, chat_entry) '''
-
-                    return {
-                        "status": "ended",
-                        "message": "No problem. Feel free to return anytime. Goodbye!",
-                        "session_id": session_id
-                    }
-
-                
-                if current_key == "Thanks" and intent == "acceptance":
-                    state["current_key"] = "Query"
-                    return{
-                        "status": "Query",
-                        "message": "Please ask your questions",
-                        "session_id": session_id
-                    }
-                
-                if current_key == "Thanks" and intent == "query":
-                    state["current_key"] = "Query"
+                elif intent == "query":
                     email = answers.get("email", "default@example.com")
                     self.session_manager.update_state(session_id, state)
                     response = await self.graph.ainvoke({
                         "input": input_text,
                         "has_image": has_image,
-                        "email": email
-                    })
-                    response_text = response.get("response", "")
-
-                    response["session_id"] = session_id
-                    return {
-                        "status": "Queries",
-                        "message": response_text + "\n Any more questions?",
-                        "session_id": session_id
-                    }
-                
-                '''if current_key == "Query" and intent == "query":
-                    state["current_key"] = "Query"
-                    email = answers.get("email", "default@example.com")
-                    self.session_manager.update_state(session_id, state)
-                    response = await self.graph.ainvoke({
-                        "input": input_text,
-                        "has_image": has_image,
-                        "email": email
-                    })
-                    response_text = response.get("response", "")
-                    response["session_id"] = session_id
-                    return {
-                        "status": "Queries",
-                        "message": response_text + "\n Any more questions?",
-                        "session_id": session_id
-                    }'''
-
-                '''if current_key == "Query" and intent == "negative":
-                    return {
-                        "status": "ended",
-                        "message": "No problem. Feel free to return anytime. Goodbye!",
-                        "session_id": session_id
-                    }'''
-
-                if intent == "query":
-                    email = answers.get("email", "default@example.com")
-                    self.session_manager.update_state(session_id, state)
-                    response = await self.graph.ainvoke({
-                        "input": input_text,
-                        "has_image": has_image,
-                        "email": email, 
+                        "email": email,
                         "session_id": session_id
                     })
                     response_text = response.get("response", "")
-                    response["session_id"] = session_id
                     return {
-                        "status": "Queries",
-                        "message": response_text + "\nCould you please reconsider answering this question?\n" + current_question,
+                        "status": "questioning",
+                        "message": response_text + "\nPlease reconsider answering the current question:\n" + current_question,
                         "session_id": session_id
                     }
 
-
-
-            # If no input provided, or couldn't interpret intent
+            # Awaiting input
             return {
                 "status": "awaiting_input",
-                "message": f"Could you please answer the following question?\n{dict(self.questions).get(state.get('current_key'), '')}",
+                "message": f"Could you please answer the following question?\n{current_question}",
                 "session_id": session_id
             }
 
-        # All personal questions completed
-        if input_text:
-            # Route to appropriate agent
-            updated_state = {
-                "input": input_text,
-                "answers": answers,
-                "email": answers.get("email", "default@example.com")
-            }
-            async for output in self.graph.stream(updated_state):
-                return {**output, "session_id": session_id}
-
-        return {
-            "status": "awaiting_query",
-            "message": "Do you have any questions you'd like to ask?",
-            "session_id": session_id
-        }
 
 
 chat_log = {}
@@ -1123,10 +877,10 @@ async def chat_loop():
     response = await router.run(input_text="start123", session_id=session_id)
     session_id = response.get("session_id", session_id)
 
-    if response.get("status") == "welcome":
-        print_bot_message(response["message"], session_id)
-    elif response.get("status") == "asking":
-        print_bot_message(response["question"], session_id)
+    # Print initial bot message
+    bot_message = response.get("message") or response.get("question", "")
+    if bot_message:
+        print_bot_message(bot_message, session_id)
 
     while True:
         try:
@@ -1141,25 +895,26 @@ async def chat_loop():
 
         log_message("user", user_input, session_id)
 
+        # Run router
         response = await router.run(user_input, session_id=session_id)
         session_id = response.get("session_id", session_id)
-
         status = response.get("status")
-        bot_message = ""
 
-        if status in {"welcome", "asking", "denial", "unclear_input", "ready_for_questions", "confirm_permanent_address"}:
-            bot_message = response.get("message") or response.get("question", "")
+        # Generalized message handling
+        bot_message = response.get("message") or response.get("question") or response.get("response") or "Something went wrong."
+        if bot_message:
             print_bot_message(bot_message, session_id)
-        elif status == "ended":
-            bot_message = "That concludes my survey. Thank you for taking my call. Goodbye"
-            print_bot_message(bot_message, session_id)
+
+        # Handle chat termination
+        if status == "ended":
             break
-        elif response.get("response"):
-            bot_message = response["response"]
-            print_bot_message(bot_message, session_id)
-        else:
-            bot_message = response.get("message", "Something went wrong.")
-            print_bot_message(bot_message, session_id)
+
+        # If status is 'repeat', ensure the same question is shown again
+        if status == "repeat":
+            continue
+
+        # If awaiting input or questioning, loop naturally for next user input
+        # All other statuses are handled by printing the message above
 
     save_chat_log()
 

@@ -53,46 +53,59 @@ class AgentConfig:
     ### Few-shot Examples
 
         Example 1  
-        Chatbot Question: "What is your address?"  
-        User Response: "Mumbai"  
+        Chatbot Question: "How are you feeling overall?"  
+        User Response: "I'm feeling a bit tired but okay."  
         Intent: answer  
-        Rationale: The user gives a relevant and complete response.
+        Rationale: The user gives a relevant about their general well-being.
 
         Example 2  
-        Chatbot Question: "What is your age?"  
-        User Response: "I'm not sharing that."  
+        Chatbot Question: "Are you experiencing any pain, nausea, or dizziness?"  
+        User Response: "I'd rather not answer that."  
         Intent: denial  
-        Rationale: The user refuses to answer.
+        Rationale: The user refuses to provide information about symptoms.
 
         Example 3  
-        Chatbot Question: "Have you have covid in the past 5 years?"  
+        Chatbot Question: "Are you able to eat, sleep, and move around normally?"  
         User Response: "Can you repeat the question?"  
         Intent: repeat  
-        Rationale: The user is asking for repetition or clarification.
+        Rationale: The user asks for clarification or repetition of the question.
 
         Example 4  
-        Chatbot Question: "Are you currently employed?"  
+        Chatbot Question: "Are you experiencing pain at the surgical site?"  
         User Response: "Why do you need to know that?"  
         Intent: query  
-        Rationale: The user is asking a counter-question.
+        Rationale: The user responds with a counter-question instead of directly answering.
 
-        Example 5
-        Chatbot Question: "Is this your permanent address?"  
-        User Response: "No"  
+        Example 5  
+        Chatbot Question: "On a scale of 0–10, how severe is your pain?"  
+        User Response: "5"  
         Intent: answer  
-        Rationale: The user is responsding to a Yes or No question
+        Rationale: The user provides a direct numerical response to the question.
 
         Example 6  
         Chatbot Question: (first utterance of the call)  
-        User Response: “Hello, good afternoon!”  
+        User Response: "Hello, good afternoon!"  
         Intent: greeting  
-        Rationale: Pure salutation at call start.
+        Rationale: Pure salutation at the start of the conversation.
 
         Example 7  
-        Chatbot Question: “May I ask you a few questions?”  
-        User Response: "Hi yes, okay”  
+        Chatbot Question: "Are the stitches, staples, or dressing intact?"  
+        User Response: "Hi yes, they look fine."  
         Intent: answer  
-        Rationale: Greeting + answer combined; overall it answers the question.
+        Rationale: Greeting + relevant answer combined; overall it answers the question.
+
+        Example 8  
+        Chatbot Question: "Do you need assistance with personal hygiene or moving around?"  
+        User Response: "No, I can manage myself."  
+        Intent: answer  
+        Rationale: The user responds appropriately to a yes/no question.
+
+        Example 9  
+        Chatbot Question: "Any signs of infection or blood clot (painful swelling in legs, redness)?"  
+        User Response: "I don't want to answer that."  
+        Intent: denial  
+        Rationale: The user refuses to disclose sensitive medical information.
+
 
         ---
 
@@ -113,434 +126,243 @@ class AgentConfig:
 
         The chatbot has asked a question. The user has responded. You have been given one or more reference answers that are considered acceptable.
 
-        Your task is to evaluate whether the user's answer is *satisfactory or not*, based on:
+        Your task is to determine whether the user’s answer is *satisfactory* based on:
 
-    - Its semantic alignment with the chatbot’s question
-    - Its consistency or proximity to the reference answer(s)
-    - Its clarity and completeness
+        - Its semantic alignment with the chatbot’s question
+        - Its consistency or proximity to the reference answer(s)
+        - Its clarity and completeness
 
-    ---
+        ---
 
-    ### 📘 Rule Book
+        ### RULE BOOK
 
-    Use the following logic to decide the evaluation:
+        Use the following decision logic:
 
-    1. ✅ If the user's answer is semantically or logically aligned with a reference answer → *satisfactory*
-    2. ❌ If the user's answer clearly contradicts or is irrelevant to the reference, or is out of expected bounds (e.g., invalid number) → *NOT satisfactory*
-    3. ❓ If the user's answer is vague, informal, or ambiguous → *REQUIRES CLARIFICATION*
+        1. If the user's answer is semantically aligned with any reference answer → satisfactory.
+        2. If the user's answer contradicts the reference, is irrelevant, or falls outside the expected numeric bounds → NOT satisfactory.
+        3. If the user’s answer is vague, unclear, partial, or ambiguous → REQUIRES CLARIFICATION.
 
-    Additional Rules:
-    - For *age, only values between **12 and 103 (inclusive)* are acceptable.
-    - For *yes/no questions, if both "Yes" and "No" are logically acceptable or allowed in the reference list, either is **ACCEPTABLE*.
-    - If unsure, prefer *REQUIRES CLARIFICATION* over incorrect rejection.
-    ---
+        Additional rules:
+        - When a question specifies a numeric range, only values within the inclusive range are acceptable.
+        - For yes/no questions, if both “Yes” and “No” appear in the reference answer list, either is acceptable.
+        - If uncertain, prefer REQUIRES CLARIFICATION over incorrectly marking an answer as unacceptable.
 
-    --------------------------------------------------------------------
-    🧭  CLARIFICATION STRATEGY
-    --------------------------------------------------------------------
-    If the user’s first reply is unclear or invalid:
+        ---
 
-    1. Respond in a **warm, conversational tone**.  
-    2. Reference the **original question context** so they know which part to fix.  
-    3. State **why** their answer could not be accepted (validation failure or ambiguity).  
-    4. Tell them **exactly what kind of reply is needed** (format, range, examples).
+        ### CRITICAL OUTPUT RULES (MUST FOLLOW)
 
-    **Second attempt still unclear?**  
-    • Rephrase the question more simply.  
-    • Offer a concrete example answer.  
-    • Do **not** repeat the identical prompt verbatim.
+        - You must NEVER output the words "REQUIRES CLARIFICATION", "NOT ACCEPTABLE", or "NOT satisfactory" anywhere in your response.
+        - If the evaluation is satisfactory, return ONLY:
 
-    #### Examples of Second-Pass Rephrasings
+        {
+        "intent": "satisfactory"
+        }
 
-    Original Question: "What is your address?"  
-    1st Clarification: "We’re asking for your current residential city or area."  
-    2nd Clarification (rephrased): "Could you tell me something like 'I live in Gurgaon' or 'I stay near Andheri in Mumbai'?"
+        *** MOST IMPORTANT ***
+        
+        - If the evaluation is *NOT ACCEPTABLE* or *REQUIRES CLARIFICATION*, return ONLY:
 
-    Original Question: "Could you please state your full name?"  
-    1st Clarification: "We’re looking for your full name — first and last."  
-    2nd Clarification (rephrased): "Could you tell me your full name, like 'Ravi Kumar' or 'Priya Sharma'? This is the name you'd use on official documents."
+        {
+        "clarification": "<friendly explanation>"
+        }
 
-    ---
+        No other text, labels, prefixes, or commentary may be included.
+
+        ---
+
+        ### CLARIFICATION MESSAGE REQUIREMENTS
+
+        When returning a clarification message, it must:
+
+        - Address the user politely.
+        - Refer to the original question so the user understands what needs fixing.
+        - Briefly explain why the answer cannot be accepted (e.g., ambiguous, outside the valid range, unclear).
+        - Clearly state what type of response is needed next, including an example.
+
+        ---
+
+        ### CLARIFICATION STRATEGY
+
+        If the user's first answer is unclear or invalid:
+        1. Respond politely.
+        2. Reference the question context.
+        3. Explain why the response is invalid or unclear.
+        4. Give specific instructions for what to provide next.
+
+        If the second attempt is still unclear:
+        - Rephrase the question simply.
+        - Provide an explicit example answer.
+
+        ---
+
         Conversation snippet:
         "{chat_log}"
 
-    ### 🧪 Few-shot Examples
-
-    Example 1  
-    Chatbot Question: "Could you please state your full name?"  
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]  
-    User Response: "Ajay"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: Only a first name is provided; a full name is expected.
-    Output:
-{
-  "clarification": "Could you please provide your last name as well, so we have your full name for our records?"
-}
-    ---
-
-    Example 2  
-    Chatbot Question: "What is your age?"  
-    Reference Answer(s): "33", "23 years old", "I am 45 years old", "My current age is 56", "45 years"
-    User Response: "120"  
-    Evaluation: NOT ACCEPTABLE  
-    Rationale: Age is outside the accepted range of 12–103.
-
-    ---
-
-    Example 3  
-    Chatbot Question: "What is your age?"  
-    Reference Answer(s): ["33", "34"]  
-    User Response: "Thirty-three"  
-    Evaluation: satisfactory
-    Rationale: Clear and semantically equivalent to the reference and within valid range.
-
-    ---
-
-    Example 4  
-    Chatbot Question: "What is your address?"  
-    Reference Answer(s): ["Delhi", "New Delhi"]  
-    User Response: "Near Karol Bagh in Delhi"  
-    Evaluation: satisfactory  
-    Rationale: Specific and consistent with the reference location.
-
-    ---
-
-    Example 5  
-    Chatbot Question: "Is this your permanent address?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "Not really"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: Ambiguous; unclear confirmation.
-
-    ---
-
-    Example 6  
-    Chatbot Question: "Please let me know your permanent address"  
-    Reference Answer(s): ["Ghaziabad", "Pune"]  
-    User Response: "I live in my hometown"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: Informal phrase; not a valid or named location.
-
-    ---
-
-    Example 7  
-    Chatbot Question: "Have you had covid in the past 5 years?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "No"  
-    Evaluation: denial 
-    Rationale: user replies negatively to the questions
-
-    ---
-
-    Example 7  
-    Chatbot Question: "Have you had covid in the past 5 years?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "yes"  
-    Evaluation: acceptance 
-    Rationale: user replies positively to the questions
-
-    ---
-
-    Example 8  
-    Chatbot Question: "In which year did you last have covid?"  
-    Reference Answer(s): ["2021", "2022"]  
-    User Response: "Maybe in 2020 or 2021"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: A year range is given, not a specific year.
-
-    ---
-
-    Example 9  
-    Chatbot Question: "Were you vaccinated at that time?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "Not sure"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: The user is unsure; clarification is needed.
-
-    ---
-
-    Example 10  
-    Chatbot Question: "Have you ever shown symptoms of covid?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "I had cough and fever"  
-    Evaluation: satisafctory 
-    Rationale: Indicates symptoms consistent with Covid.
-
-    ---
-
-    Example 11  
-    Chatbot Question: "Have you ever been vaccinated for Covid?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "I got two shots"  
-    Evaluation: satisfactory  
-    Rationale: Clearly indicates vaccination history.
-
-    ---
-
-    Example 12  
-    Chatbot Question: "What is your email address?"  
-    Reference Answer(s): ["ajay.kumar@gmail.com"]  
-    User Response: "ajay[at]gmail"  
-    Evaluation: NOT ACCEPTABLE  
-    Rationale: Invalid email format.
-
-    ---
-
-    Example 13  
-    Chatbot Question: "Thank you! Feel free to ask if you have any questions."  
-    Reference Answer(s): []  
-    User Response: "Thanks, I'm good."  
-    Evaluation: satisfactory  
-    Rationale: Friendly closure; no follow-up needed.
-
-    Example 14  
-    Chatbot Question: "Is this your permanent address"  
-    Reference Answer(s): ["yes", "yes this is my permanent address"]  
-    User Response: "Yes"  
-    Evaluation: acceptance  
-    Rationale: user replies positively to the questions
-
-    Example 14  
-    Chatbot Question: "Is this your permanent address"  
-    Reference Answer(s): ["No", "No this is not my permanent address"]  
-    User Response: "No"  
-    Evaluation: denial  
-    Rationale: user replies negatively to the questions
-
-    Example 15
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "Sanjay Gupta"
-    Evaluation: satisfactory
-    Rationale: Two-part name supplied; meets the “full name” rule even though it is not in the reference list.
-
-    Example 16
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "Ajay"
-    Evaluation: REQUIRES CLARIFICATION
-    Rationale: Only one name part provided; a full name requires at least two name parts.
-    Output:
-{
-  "clarification": "Could you please provide your last name as well, so we have your full name for our records?"
-}
-    ---
-    
-
-    Example 17
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "R. Gupta"
-    Evaluation: satisfactory
-    Rationale: Contains two name parts; abbreviations are allowed as long as the format follows two or more words.
-    
-    Example 18
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "K. Singh"
-    Evaluation: satisfactory
-    Rationale: Two name parts supplied; format is acceptable as per the full name rule.
-    
-    Example 19
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "Priya"
-    Evaluation: REQUIRES CLARIFICATION
-    Rationale: Single name part given; clarification required for full name.
-    Output:
-{
-  "clarification": "Could you please provide your last name as well, so we have your full name for our records?"
-}
-    ---
         ---
-    
-    If the evaluation is satisafactory then return "satisfactory", if the evaluation is acceptance then return "acceptance", if the evaluation is denial then return "denial" or else if the evaluation is "NOT ACCEPTABLE" or "REQUIRES CLARIFICATION" then form a suitable expalation behind that using the rationale and return the "explanation".
-    ---
-        Respond ONLY in the following JSON format:
-        For a satisfactory response just respond as
-                    {
-        "intent": "satisfactory"
-        } without making any changes.
 
-        For a acceptance response just respond as
-                    {
-        "intent": "acceptance"
-        } without making any changes.
+        ### FEW-SHOT EXAMPLES
 
-        For a denial response just respond as
-                    {
-        "intent": "denial"
-        } without making any changes.
-
-    --------------------------------------------------------------------
-    💬  CLARIFICATION RESPONSE TEMPLATE
-    --------------------------------------------------------------------
-    When you decide the reply is *NOT satisfactory* or *REQUIRES clarification*,
-    return JSON with a single key **"clarification"** whose value is a friendly,
-    context-aware message you craft on-the-fly:
-
+        Example 1 — General Health and Well-being-1  
+        Chatbot Question: "How are you feeling overall?"  
+        Reference Answer(s): ["I am feeling fine", "I feel okay", "I'm doing well"]  
+        User Response: "Not sure… just weird"  
+        Evaluation: REQUIRES CLARIFICATION  
+        Output:  
         {
-          "clarification": "<dynamic friendly message>"
+        "clarification": "Could you describe how you are feeling overall? For example, do you feel fine, uncomfortable, tired, or unwell?"
         }
 
-    ⚠️  The message **must**:
-      • Address the user politely (“Hi…”, “Thanks for letting me know…”)  
-      • Mention the field or question that needs fixing (e.g. “your age”, “your email address”)  
-      • Briefly explain the issue (e.g. “that age is outside the valid range of 12-103”)  
-      • Tell them *exactly* what to provide next, ideally with an example.
+        ---
+
+        Example 2 — General Health and Well-being-2  
+        Chatbot Question: "Are you experiencing any pain, nausea, or dizziness?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "A bit"  
+        Evaluation: REQUIRES CLARIFICATION  
+        Output:  
+        {
+        "clarification": "Could you specify whether you are experiencing pain, nausea, dizziness, or more than one of these?"
+        }
+
+        ---
+
+        Example 3 — General Health and Well-being-3  
+        Chatbot Question: "Are you able to eat, sleep, and move around normally?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "Yes, everything is normal"  
+        Evaluation: satisfactory  
+        Output:  
+        {
+        "intent": "satisfactory"
+        }
+
+        ---
+
+        Example 4 — Pain and Medication-1  
+        Chatbot Question: "Are you experiencing pain at the surgical site?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "No"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 5 — Pain and Medication-2  
+        Chatbot Question: "On a scale of 0–10, how severe is your pain?"  
+        Reference Answer(s): ["0"…"10"]  
+        User Response: "Maybe like 20"  
+        Evaluation: NOT ACCEPTABLE  
+        Output:  
+        {
+        "clarification": "The pain scale must be between 0 and 10. Could you tell me your pain level within this range?"
+        }
+
+        ---
+
+        Example 6 — Pain and Medication-3  
+        Chatbot Question: "Are you taking your prescribed medications as directed?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "Mostly"  
+        Evaluation: REQUIRES CLARIFICATION  
+        Output:  
+        {
+        "clarification": "Are you taking all your prescribed medications exactly as instructed? Please answer Yes or No."
+        }
+
+        ---
+
+        Example 7 — Pain and Medication-4  
+        Chatbot Question: "Any side effects from medications (like nausea, rash, constipation)?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "I feel nauseous sometimes"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 8 — Surgical Site / Wound-1  
+        Chatbot Question: "Is there redness, swelling, or discharge at the incision?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "A little redness"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 9 — Surgical Site / Wound-2  
+        Chatbot Question: "Any bleeding or unusual smell?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "Not sure"  
+        Evaluation: REQUIRES CLARIFICATION  
+        Output:  
+        {
+        "clarification": "Have you noticed any bleeding or an unusual smell at the incision site? Please answer Yes or No."
+        }
+
+        ---
+
+        Example 10 — Surgical Site / Wound-3  
+        Chatbot Question: "Are the stitches, staples, or dressing intact?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "Everything looks fine to me"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 11 — Mobility and Daily Activities-1  
+        Chatbot Question: "Can you walk, stand, or perform daily activities without difficulty?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "I can walk but standing is painful"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 12 — Mobility and Daily Activities-2  
+        Chatbot Question: "Do you need assistance with personal hygiene or moving around?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "Kind of"  
+        Evaluation: REQUIRES CLARIFICATION  
+        Output:  
+        {
+        "clarification": "Do you currently need help with bathing, using the toilet, or moving around? Please answer Yes or No."
+        }
+
+        ---
+
+        Example 13 — Mobility and Daily Activities-3  
+        Chatbot Question: "Are there limitations on physical activity or lifting?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "Yes, I can't lift heavy things"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 14 — Vital Signs / Complications-1  
+        Chatbot Question: "Are you experiencing fever, chills, or rapid heartbeat?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "No"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 15 — Vital Signs / Complications-2  
+        Chatbot Question: "Any shortness of breath, chest pain, or unusual swelling?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "I had chest pain last night"  
+        Evaluation: satisfactory  
+
+        ---
+
+        Example 16 — Vital Signs / Complications-3  
+        Chatbot Question: "Any signs of infection or blood clot (painful swelling in legs, redness)?"  
+        Reference Answer(s): ["Yes", "No"]  
+        User Response: "I don't know"  
+        Evaluation: REQUIRES CLARIFICATION  
+        Output:  
+        {
+        "clarification": "Have you noticed painful swelling in your legs, increased redness, warmth, or similar symptoms? Please answer Yes or No."
+        }
 
         """
-    
-    DECISION_SYSTEM_PROMPT =  """
-        You are a *Query intent subclassifier*.
-
-        The user's response has already been recognised as a *Query. Your task is to determine which *subtype of Query it is:
-
-        * *Query:Clarification* — The user asks for clarification about the chatbot’s current question or any earlier question in the same conversation.
-        * *Query:PersonalInfo* — The user asks what personal data the system already stores about them (e.g. name, age, phone number, location, address, or e‑mail).
-        * *QueryTopic* — The user requests Covid‑related facts, guidance, or information that should be answered through the Covid RAG knowledge source.
-        * *Query:General* — Any other question, such as asking about us, the reason/purpose of the call, or anything that doesn’t match the above sub‑intents.
-
-        ---
-
-        ### Few‑shot examples (non‑table format)
-
-        *Example 1*
-
-        * *Chatbot Question:* "What is your age?"
-        * *User Response:* "Do you want it in years or date of birth?"
-        * *Intent:* Query\:Clarification
-        * *Rationale:* The user clarifies how to give their age.
-
-        *Example 2*
-
-        * *Chatbot Question:* "What is your address?"
-        * *User Response:* "Did you need my current address or the permanent one you asked earlier?"
-        * *Intent:* Query\:Clarification
-        * *Rationale:* Clarifies which address to provide.
-
-        *Example 3*
-
-        * *Chatbot Question:* "Have you had any symptoms recently?"
-        * *User Response:* "What name do you have on file for me?"
-        * *Intent:* Query\:PersonalInfo
-        * *Rationale:* Asks for stored name.
-
-        *Example 4*
-
-        * *Chatbot Question:* "What is your phone number?"
-        * *User Response:* "Do you already have my phone or should I repeat it?"
-        * *Intent:* Query\:PersonalInfo
-        * *Rationale:* Wants to know if phone is already stored.
-
-        *Example 5*
-
-        * *Chatbot Question:* "Could you confirm your email address?"
-        * *User Response:* "What details of mine have you saved so far?"
-        * *Intent:* Query\:PersonalInfo
-        * *Rationale:* Requests the list of stored data.
-
-        *Example 6*
-
-        * *Chatbot Question:* "Have you tested positive for Covid‑19 in the past 5 years?"
-        * *User Response:* "What are the usual Covid symptoms I should look for?"
-        * *Intent:* Query\:Topic
-        * *Rationale:* Requests Covid information.
-
-        *Example 7*
-
-        * *Chatbot Question:* "Were you vaccinated the last time you had Covid?"
-        * *User Response:* "How effective is the Covaxin booster?"
-        * *Intent:* Query\:Topic
-        * *Rationale:* Covid‑vaccine efficacy question.
-
-        *Example 8*
-
-        * *Chatbot Question:* "Have you ever been vaccinated for Covid?"
-        * *User Response:* "Are masks still recommended indoors?"
-        * *Intent:* Query\:Topic
-        * *Rationale:* Covid guidance.
-
-        *Example 9*
-
-        * *Chatbot Question:* "What is your full name?"
-        * *User Response:* "Who are you calling on behalf of?"
-        * *Intent:* Query\:General
-        * *Rationale:* Wants information about the caller.
-
-        *Example 10*
-
-        * *Chatbot Question:* "Can you confirm your permanent address?"
-        * *User Response:* "Why exactly are you collecting my data?"
-        * *Intent:* Query\:General
-        * *Rationale:* Purpose of the call.
-
-        *Example 11*
-
-        * *Chatbot Question:* "Have you shown symptoms of Covid?"
-        * *User Response:* "Is my information kept secure?"
-        * *Intent:* Query\:General
-        * *Rationale:* Data‑security question.
-
-        *Example 12*
-
-        * *Chatbot Question:* "Do you smoke?"
-        * *User Response:* "What’s the temperature in Delhi today?"
-        * *Intent:* Query\:General
-        * *Rationale:* Miscellaneous question not related to other intents.
-
-        *Example 13*
-
-        * *Chatbot Question:* "Have you had any surgeries recently?"
-        * *User Response:* "Sorry, which surgeries are you referring to again?"
-        * *Intent:* Query\:Clarification
-        * *Rationale:* Clarifies scope of the question.
-
-        *Example 14*
-
-        * *Chatbot Question:* "When did you last have Covid?"
-        * *User Response:* "What are the guidelines for long Covid recovery?"
-        * *Intent:* Query\:Topic
-        * *Rationale:* Covid guidance question.
-
-        *Example 15*
-
-        * *Chatbot Question:* "Do you agree to continue?"
-        * *User Response:* "How long will my data be stored?"
-        * *Intent:* Query\:General
-        * *Rationale:* Data‑retention question.
-
-        ---
-
-        ### Input template
 
 
-        Chatbot Question: "<CHATBOT_QUESTION>"
-        User Response: "<USER_RESPONSE>"
-
-
-        ---
-
-       OUTPUT INSTRUCTIONS
-        You must output ONLY a single valid JSON object. No markdown. No explanations. No extra text. No surrounding quotes.
-
-        If unsure, choose the closest matching intent.
-
-        Mapping:
-        Query:Clarification → CONVERSATION_AGENT
-        Query:PersonalInfo → MONGO_QUERY
-        Query:Topic → RAG_AGENT
-        Query:General → GENERAL_AGENT
-
-        ---
-
-        OUTPUT FORMAT (strict)
-        {
-        "intent": "<Query:Clarification | Query:PersonalInfo | Query:Topic | Query:General>",
-        "agent": "<CONVERSATION_AGENT | MONGO_QUERY | RAG_AGENT | GENERAL_AGENT>",
-        "confidence": 0.95,
-        "rationale": "<Very short explanation>"
-        }"""
     
     CLARIFICATION_ASSISTANT_PROMPT = """
     You are a clarification assistant.

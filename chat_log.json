@@ -1,5 +1,5 @@
 {
-  "cea03512-dfd0-4271-8ef6-8e143900a9e7": [
+  "c10fb14b-4bb0-4208-bb10-a594af97226e": [
     {
       "role": "bot",
       "message": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
@@ -10,23 +10,31 @@
     },
     {
       "role": "bot",
-      "message": "Could you please state your full name?"
+      "message": "\"Hi there! How can I help you today?\" Should we start with the survey?"
     },
     {
       "role": "user",
-      "message": "What is covid"
+      "message": "yes"
     },
     {
       "role": "bot",
-      "message": "COVID-19, also known as coronavirus disease 2019, is an illness caused by the virus SARS-CoV-2. It spreads primarily through respiratory droplets when an infected person coughs, sneezes, talks, or breathes. The virus can also spread by touching surfaces contaminated with the virus and then touching the face. Symptoms can range from mild to severe and may include fever, cough, shortness of breath, fatigue, muscle aches, loss of taste or smell, and more. It is important to follow preventive measures such as wearing masks, practicing social distancing, and getting vaccinated to reduce the spread of the virus.\nCould you please reconsider answering this question?\nCould you please state your full name?"
+      "message": "How are you feeling overall?"
     },
     {
       "role": "user",
-      "message": "Rahul"
+      "message": "good"
     },
     {
       "role": "bot",
-      "message": "Hi there! Thanks for providing your name. We are looking for your full name with both first and last names. Could you please provide both your first and last names, like 'Rahul Gupta'? This will help us update our records accurately. Thank you!"
+      "message": "Next question:\nAre you experiencing any pain, nausea, or dizziness?"
+    },
+    {
+      "role": "user",
+      "message": "no"
+    },
+    {
+      "role": "bot",
+      "message": "Next question:\nAre you able to eat, sleep, and move around normally?"
     }
   ]
 }
