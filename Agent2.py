@@ -13,7 +13,7 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain_openai import AzureChatOpenAI
 from langchain_core.callbacks import StreamingStdOutCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
-from Prompts1 import AgentConfig
+from Prompts2 import AgentConfig
 
 from mongooperations import get_mongo_client, store_user_data
 from extract_mongo import retrieve_data
@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 from fastapi.responses import StreamingResponse
 
-from questions import QUESTIONS
+from question2 import QUESTIONS, FOLLOW_UP_QUESTIONS
 
 mongo_uri = os.getenv('MONGO_URL')
 database_name = "chat_db"
@@ -95,6 +95,7 @@ class IntentRouter:
         self.retriever = self.retrieval.retrieve_data()
 
         self.questions = QUESTIONS
+        self.followup = FOLLOW_UP_QUESTIONS
 
 
         self.log_path = "interaction.docx"
@@ -326,6 +327,61 @@ class IntentRouter:
             logging.warning(f"Answer classification error: {e}")
 
         return value
+    
+    def followup_llm(self, chat_log: dict, question: str, answer: str, follow_up: str):
+        # Format chat_log into readable Q/A pairs
+        formatted_chat_log = "\n".join([f"Q: {q}\nA: {a}" for q, a in chat_log.items()]) or "No previous questions."
+
+        # Fill the prompt template
+        prompt = AgentConfig.FOLLOW_UP_DECIDER_PROMPT.format(
+            chat_log=formatted_chat_log,
+            question=question,
+            answer=answer,
+            follow_up=follow_up
+        )
+
+        messages = [
+            {"role": "system", "content": AgentConfig.FOLLOW_UP_DECIDER_PROMPT},  # system instructions
+            {"role": "user", "content": prompt}
+        ]
+
+        payload = {
+            "messages": messages,
+            "temperature": 0,
+            "max_tokens": 200
+        }
+
+        ask_followup = False
+        reason = ""
+
+        try:
+            start_time = time.time()
+            response = requests.post(self.url, json=payload)
+            end_time = time.time()
+            print("Time taken for follow-up LLM call:", end_time - start_time)
+
+            response.raise_for_status()
+            data = response.json()
+
+            content = data["choices"][0]["message"]["content"]
+
+            # Extract JSON block
+            match = re.search(r"\{.*\}", content, re.DOTALL)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                    ask_followup = parsed.get("ask_followup", False)
+                    reason = parsed.get("reason", "")
+                except Exception as e:
+                    logging.warning(f"JSON parse failed: {e}")
+            else:
+                logging.warning("No JSON block found in model output")
+
+        except Exception as e:
+            logging.warning(f"Follow-up classification error: {e}")
+
+        return ask_followup, reason
+
 
 
 
@@ -842,12 +898,41 @@ class IntentRouter:
                 if intent == "answer":
                     answer_validity = self.classify_answer(input_text, current_question)
                     print("answer validity:", answer_validity)
+
                     if answer_validity == "satisfactory":
-                        # Save answer
+                        # Save primary answer
                         answers[current_key] = input_text
                         state["answers"] = answers
 
-                        # Move to next question
+                        # Check if a follow-up question exists for this key
+                        follow_up = self.followup.get(current_key)
+
+                        if follow_up:
+                            # Decide via LLM whether follow-up should be asked
+                            ask_followup, reason = self.followup_llm(
+                                chat_log=state["answers"],
+                                question=current_question,
+                                answer=input_text,
+                                follow_up=follow_up
+                            )
+
+                            print("Follow-up decision:", ask_followup, "| Reason:", reason)
+
+                            if ask_followup:
+                                # Track follow-up state
+                                state["current_follow_up"] = current_key
+                                state["pending_follow_up_question"] = follow_up
+                                state["follow_up_reason"] = reason  # optional (debug / audit)
+
+                                self.session_manager.update_state(session_id, state)
+
+                                return {
+                                    "status": "awaiting_input",
+                                    "message": follow_up,
+                                    "session_id": session_id
+                                }
+
+                        # Either no follow-up exists OR LLM decided to skip it
                         state = self.move_to_next_question(state)
                         self.session_manager.update_state(session_id, state)
 
@@ -855,11 +940,10 @@ class IntentRouter:
                         if next_question:
                             return {
                                 "status": "awaiting_input",
-                                "message": f"Next question:\n{next_question}",
+                                "message": next_question,
                                 "session_id": session_id
                             }
                         else:
-                            self.session_manager.update_state(session_id, state)
                             return {
                                 "status": "completed",
                                 "message": "Thank you for completing the survey!",

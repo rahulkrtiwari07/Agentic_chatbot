@@ -1,16 +1,8 @@
 {
-  "c10fb14b-4bb0-4208-bb10-a594af97226e": [
+  "802d9f2e-2e77-4b0f-bad5-168929194099": [
     {
       "role": "bot",
       "message": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
-    },
-    {
-      "role": "user",
-      "message": "ok"
-    },
-    {
-      "role": "bot",
-      "message": "\"Hi there! How can I help you today?\" Should we start with the survey?"
     },
     {
       "role": "user",
@@ -18,23 +10,31 @@
     },
     {
       "role": "bot",
-      "message": "How are you feeling overall?"
+      "message": "Overall, how would you describe your health in the past few days?"
     },
     {
       "role": "user",
-      "message": "good"
+      "message": "Fine"
     },
     {
       "role": "bot",
-      "message": "Next question:\nAre you experiencing any pain, nausea, or dizziness?"
+      "message": "Have you experienced any new or ongoing symptoms such as pain, fatigue, dizziness, or discomfort?"
     },
     {
       "role": "user",
-      "message": "no"
+      "message": "No"
     },
     {
       "role": "bot",
-      "message": "Next question:\nAre you able to eat, sleep, and move around normally?"
+      "message": "Are you able to carry out your daily activities, such as work or household tasks, without difficulty?"
+    },
+    {
+      "role": "user",
+      "message": "yes"
+    },
+    {
+      "role": "bot",
+      "message": "Have you noticed any recent changes in your weight, appetite, or sleep pattern?"
     }
   ]
 }

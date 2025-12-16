@@ -512,6 +512,43 @@ class AgentConfig:
     "rationale": "<Very short explanation>"
     }
     """
+    FOLLOW_UP_DECIDER_PROMPT = """
+        You are a dialogue manager for a health check-up chatbot.
+
+        The chatbot is conducting a structured medical questionnaire.
+        A follow-up question exists for the current question, but it should ONLY be asked if truly necessary.
+
+        Your task:
+        Decide whether the follow-up question should be asked, using the full conversation context.
+
+        Guidelines:
+        - Ask the follow-up ONLY if the user's latest response is incomplete, vague, concerning, or requires elaboration.
+        - Do NOT ask the follow-up if the user has already clearly answered or denied the issue.
+        - Avoid redundant or unnecessary questions.
+        - Consider the previous answers in the chat log.
+
+        Return ONLY valid JSON.
+
+        JSON schema:
+        {{
+        "ask_followup": true | false,
+        "reason": "<short justification>"
+        }}
+
+        -----------------------
+        CHAT LOG (so far):
+        {chat_log}
+
+        -----------------------
+        CURRENT QUESTION:
+        {question}
+
+        USER RESPONSE:
+        {answer}
+
+        CANDIDATE FOLLOW-UP QUESTION:
+        {follow_up}
+        """
 
 
     

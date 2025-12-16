@@ -5,41 +5,37 @@ import requests
 # 1. Import base prompts + questions
 # -----------------------------
 from Prompts1 import AgentConfig       # your original prompts file
-from questions import QUESTIONS            # list of (key, question_text)
+from questions1 import QUESTIONS       # list of (key, question_text)
 
 
 # -----------------------------
-# 2. Template to modify prompts based on question
+# 2. LLM Call (single prompt + full questionnaire)
 # -----------------------------
-PROMPT_UPDATE_TEMPLATE = """
-You will receive:
-1. A survey/medical question.
-2. A base system prompt used by an AI agent.
-
-Your task:
-- Modify/update the base prompt so it works *specifically* for the given question.
-- Focus on clarity, accuracy, and alignment with the question’s purpose.
-- Keep the structure intact but refine the content.
-- Do NOT return examples or JSON unless the base prompt uses them.
-
-Return ONLY the updated prompt text.
-"""
-
-
-# -----------------------------
-# 3. LLM Call
-# -----------------------------
-def call_llm(base_prompt: str, question: str):
+def call_llm(base_prompt: str, questions_text: str):
     url = "http://164.52.193.73:9000/v1/chat/completions"
 
+    combined_content = f"""
+You are asked to update a base AI agent prompt based on a full questionnaire.
+
+Questionnaire:
+{questions_text}
+
+Base Prompt:
+{base_prompt}
+
+Task:
+Update the base prompt so it works for the entire questionnaire.
+Focus on clarity, accuracy, and alignment with the questions’ purpose.
+Change the few-shot examples on the basis of the questions for each prompt.
+
+Return ONLY the updated prompt text.
+    """
+
     payload = {
-        "model": "gpt-4o-mini",
         "messages": [
-            {"role": "system", "content": "You rewrite and specialize prompts."},
-            {"role": "user", "content": PROMPT_UPDATE_TEMPLATE},
-            {"role": "user", "content": f"### QUESTION:\n{question}\n"},
-            {"role": "user", "content": f"### BASE PROMPT:\n{base_prompt}"}
-        ]
+            {"role": "user", "content": combined_content}
+        ],
+        "max_tokens": 100000
     }
 
     response = requests.post(url, json=payload)
@@ -48,12 +44,12 @@ def call_llm(base_prompt: str, question: str):
 
 
 # -----------------------------
-# 4. Collect all prompts from AgentConfig
+# 3. Collect all prompts from AgentConfig
 # -----------------------------
 def get_all_base_prompts():
     collected = {}
     for attr in dir(AgentConfig):
-        if attr.endswith("_PROMPT"):
+        if attr.endswith("_PROMPT") or attr.endswith("_MESSAGE"):
             value = getattr(AgentConfig, attr)
             if isinstance(value, str):
                 collected[attr] = value
@@ -61,32 +57,31 @@ def get_all_base_prompts():
 
 
 # -----------------------------
-# 5. Build updated prompts for each question
+# 4. Build updated prompts
 # -----------------------------
-def update_prompts_for_all_questions():
+def update_all_prompts():
     base_prompts = get_all_base_prompts()
     updated_output = {}
 
-    print("\n=== Updating Prompts Based on Questions ===\n")
+    # Convert all questions into a single text block
+    questions_text = "\n".join([f"{i+1}. {q_text}" for i, (_, q_text) in enumerate(QUESTIONS)])
 
-    for q_key, q_text in QUESTIONS:
-        print(f"Processing question: {q_key}")
+    print("\n=== Updating prompts using full questionnaire (one at a time) ===\n")
 
-        updated_output[q_key] = {}
-
-        # For each base prompt, generate a specialized version
-        for prompt_name, prompt_text in base_prompts.items():
-            print(f"  → Updating {prompt_name}...")
-            updated_text = call_llm(prompt_text, q_text)
-            updated_output[q_key][prompt_name] = updated_text
-
-        print(f"✓ Completed {q_key}\n")
-
+    for name, text in base_prompts.items():
+        print(f"→ Updating {name} ...")
+        try:
+            updated_text = call_llm(text, questions_text)
+            updated_output[name] = updated_text
+            print(f"✓ {name} updated.\n")
+        except requests.exceptions.RequestException as e:
+            print(f"⚠ Failed to update {name}: {e}")
+    
     return updated_output
 
 
 # -----------------------------
-# 6. Save to new output file
+# 5. Save to JSON file
 # -----------------------------
 def save_output(updated_data):
     with open("updated_prompts.json", "w", encoding="utf-8") as f:
@@ -99,5 +94,5 @@ def save_output(updated_data):
 # MAIN
 # -----------------------------
 if __name__ == "__main__":
-    updated = update_prompts_for_all_questions()
+    updated = update_all_prompts()
     save_output(updated)
