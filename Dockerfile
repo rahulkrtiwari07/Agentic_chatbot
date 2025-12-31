@@ -1,27 +1,25 @@
-#Use the official python base image
-FROM python:3.9
+# Use slim Python base image
+FROM python:3.9-slim
 
+# Set working directory
+WORKDIR /app
 
-#Set the working directory inside the container
-WORKDIR /app 
+# Install system dependencies for lancedb
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Copy only requirements.txt first (important)
+COPY requirements.txt .
 
-# COPY requiremenets.txt .
+# Install Python dependencies
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-#install requirements.txt 
-RUN pip install -r requirements.txt 
+# Copy the rest of the application code
+COPY . .
 
-#Copy the application code to the working directory 
-COPY . . 
-
-#
-ENV NAME venv
-
-#Expose the port on which the application form 
+# Expose FastAPI port
 EXPOSE 8002
 
-
-##Run the main.py when the container launches 
+# Run the app
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8002"]

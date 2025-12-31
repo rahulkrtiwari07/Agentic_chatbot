@@ -97,7 +97,7 @@ class IntentRouter:
             streaming=False,
             max_retries=2,
         )'''
-        self.url = "http://164.52.193.73:8900/chat"
+        self.url = "http://164.52.193.73:9200/v1/chat/completions"
 
         '''self.url = ChatOpenAI(
             model="/model_weights/snapshots/093f9f388b31de276ce2de164bdc2081324b9767",
@@ -119,7 +119,7 @@ class IntentRouter:
         self.graph = self._build_graph()
 
     def route_agent(self, state):
-        input_text = state["input"]
+        input_text = state.get("input", "")
 
         messages = [
             {"role": "system", "content": AgentConfig.DECISION_SYSTEM_PROMPT},
@@ -133,32 +133,51 @@ class IntentRouter:
         }
 
         try:
-            response = requests.post(self.url, json=payload)
-            #print("[DEBUG] Route agent raw output:", response.text)
+            response = requests.post(self.url, json=payload, timeout=10)
             response.raise_for_status()
             data = response.json()
 
-            # Extract assistant response content
-            content = data["choices"][0]["message"]["content"].strip()
+            content = data["choices"][0]["message"]["content"]
 
-            # Remove markdown code fences if present
-            cleaned = re.sub(r"^(?:json)?\s*|\s*$", "", content.strip(), flags=re.DOTALL).strip()
+            # ---------- FIX 1: Properly strip markdown fences ----------
+            cleaned = re.sub(
+                r'^```(?:json)?\s*|\s*```$',
+                '',
+                content.strip(),
+                flags=re.IGNORECASE | re.MULTILINE
+            ).strip()
 
-            # Replace newlines inside JSON strings (common model issue)
-            fixed_json = re.sub(r'(?<!\\)\n', ' ', cleaned)
-
-            # Try parsing JSON
+            # ---------- FIX 2: Parse JSON safely ----------
             try:
-                decision = json.loads(fixed_json)
-            except json.JSONDecodeError as e:
-                logging.warning(f"Route agent JSON parse failed. Cleaned content: {cleaned}")
-                decision = {
-                    "agent": "parse_error_fallback_agent",
-                    "reasoning": f"Invalid JSON from LLM: {cleaned}",
-                    "confidence": 0.0
-                }
+                decision = json.loads(cleaned)
+            except json.JSONDecodeError:
+                # Attempt newline repair ONLY if parsing fails
+                fixed = re.sub(r'(?<!\\)\n', ' ', cleaned)
+                try:
+                    decision = json.loads(fixed)
+                except json.JSONDecodeError:
+                    logging.warning(
+                        f"Route agent JSON parse failed. Raw content: {content}"
+                    )
+                    decision = {
+                        "agent": "parse_error_fallback_agent",
+                        "reasoning": f"Invalid JSON from LLM: {cleaned}",
+                        "confidence": 0.0
+                    }
 
-            # Confidence check
+            # ---------- FIX 3: Validate agent name ----------
+            valid_agents = {
+                "CONVERSATION_AGENT",
+                "RAG_AGENT",
+                "MONGO_QUERY",
+                "GENERAL_AGENT",
+                "WEB_SEARCH_PROCESSOR_AGENT",
+            }
+
+            if decision.get("agent") not in valid_agents:
+                decision["agent"] = "unknown_intent_handler"
+
+            # ---------- FIX 4: Confidence gating ----------
             if decision.get("confidence", 0) < AgentConfig.CONFIDENCE_THRESHOLD:
                 decision["agent"] = "low_confidence_fallback_agent"
 
@@ -171,6 +190,7 @@ class IntentRouter:
             }
 
         return {**state, **decision}
+
     
     def format_chat_log(self, chat_log):
         if not chat_log:

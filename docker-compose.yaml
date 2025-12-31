@@ -7,10 +7,8 @@ services:
     restart: always
     depends_on:
       - mongo
-      - elasticsearch
     environment:
       - MONGODB_URI=mongodb://root:root12345!!@mongodb:27018
-      - ELASTICSEARCH_URL=http://elasticsearch:9300
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:
@@ -21,27 +19,6 @@ services:
               count: all
               capabilities: [gpu]
       
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
-    container_name: elasticsearch_agent
-    environment:
-      - node.name=elasticsearch
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ELASTIC_PASSWORD=elasticsearch123docker
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - cluster.routing.allocation.disk.watermark.low=95%
-      - cluster.routing.allocation.disk.watermark.high=98%
-      - cluster.routing.allocation.disk.watermark.flood_stage=99%
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    volumes:
-    - es_data:/usr/share/elasticsearch/data
-    ports:
-      - "9201:9200"
-    restart: always 
 
   mongo:
     image: mongo:6

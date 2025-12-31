@@ -27,6 +27,10 @@ from fastapi.responses import StreamingResponse
 
 from question2 import QUESTIONS, FOLLOW_UP_QUESTIONS
 
+import redis
+
+r = redis.Redis(host='164.52.193.73', port=6379, db=0)
+
 mongo_uri = os.getenv('MONGO_URL')
 database_name = "chat_db"
 collection_name = "user_data"
@@ -110,7 +114,7 @@ class IntentRouter:
             streaming=False,
             max_retries=2,
         )'''
-        self.url = "http://164.52.193.73:9000/v1/chat/completions"
+        self.url = "http://164.52.193.73:9200/v1/chat/completions"
 
         '''self.url = ChatOpenAI(
             model="/model_weights/snapshots/093f9f388b31de276ce2de164bdc2081324b9767",
@@ -324,6 +328,8 @@ class IntentRouter:
                 logging.warning("No JSON block found in model output")
 
         except Exception as e:
+            if 'response' in locals():
+                print(f"Server Response: {response.text}") # This will tell you the exact error
             logging.warning(f"Answer classification error: {e}")
 
         return value
@@ -599,39 +605,63 @@ class IntentRouter:
         # Yield the actual result
         yield {"response": final_response}
 
-    def call_correction_llm(self, user_input, answers_dict):
+    def call_correction_llm(self,user_input,answers_dict,questions,chat_log,current_key=None):
         print("correction_classifier")
 
-        # Prepare previous answers in readable format
-        answers_text = "\n".join([f"{k}: {v}" for k, v in answers_dict.items()])
+        # Format answers
+        answers_text = "\n".join(
+            [f"{k}: {v}" for k, v in answers_dict.items()]
+        )
+
+        # Format questions (key → text)
+        questions_text = "\n".join(
+            [f"{k}: {q}" for k, q in questions]
+        )
+
+        # Format chat log
+        chat_log_text = "\n".join(
+            f"{m['role'].capitalize()}: {m['message']}" for m in chat_log
+        )
 
         # System prompt
         system_prompt = """
-        You are a correction analyzer.
+    You are a correction analyzer.
 
-        The user wants to correct one of their previous answers.
+    The user wants to correct one of their previous answers in a multi-step questionnaire.
 
-        Your tasks:
-        1. Identify which question key the correction belongs to.
-        2. Extract the corrected value.
-        3. If unsure, respond with certainty = "uncertain".
+    Your tasks:
+    1. Identify which question key the correction belongs to.
+    2. Extract the corrected value.
+    3. Use chat history, question text, and previous answers to decide.
+    4. If the user refers vaguely (e.g. "last one", "previous question"),
+    prefer the most recently answered question.
+    5. Do NOT guess. If unsure, respond with certainty = "uncertain".
 
-        Return ONLY valid JSON structured as:
-        {
-        "certainty": "certain" or "uncertain",
-        "key": "<question_key or empty>",
-        "value": "<corrected_value or empty>"
-        }
-        """
+    Return ONLY valid JSON structured as:
+    {
+    "certainty": "certain" or "uncertain",
+    "key": "<question_key or empty>",
+    "value": "<corrected_value or empty>"
+    }
+    """
 
         # User message
         user_message = f"""
-        Previous answers:
-        {answers_text}
+    Questions (key → text):
+    {questions_text}
 
-        User correction message:
-        "{user_input}"
-        """
+    Previous answers:
+    {answers_text}
+
+    Current question key:
+    {current_key}
+
+    Chat history:
+    {chat_log_text}
+
+    User correction message:
+    "{user_input}"
+    """
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -655,33 +685,28 @@ class IntentRouter:
             response.raise_for_status()
             data = response.json()
 
-            # Extract LLM text content
             content = data["choices"][0]["message"]["content"].strip()
 
-            # Look for JSON block like { ... }
+            # Extract JSON block
             match = re.search(r"\{.*\}", content, re.DOTALL)
             if match:
                 try:
                     parsed = json.loads(match.group(0))
-
-                    # Ensure required keys exist
                     return {
                         "certainty": parsed.get("certainty", "uncertain"),
                         "key": parsed.get("key", ""),
                         "value": parsed.get("value", "")
                     }
-
                 except Exception as e:
-                    logging.warning(f"JSON parse failed, returning fallback: {e}")
+                    logging.warning(f"JSON parse failed, returning uncertain: {e}")
                     return {"certainty": "uncertain", "key": "", "value": ""}
-
             else:
-                # If no JSON detected, treat as uncertain
                 return {"certainty": "uncertain", "key": "", "value": ""}
 
         except Exception as e:
             logging.warning(f"Correction classification error: {e}")
             return {"certainty": "uncertain", "key": "", "value": ""}
+
 
 
 
@@ -889,6 +914,120 @@ class IntentRouter:
         current_key = state.get("current_key")
         current_question = state.get("current_question")
 
+        # ============================================================
+        # FOLLOW-UP ANSWER HANDLING (RUNS FIRST)
+        # ============================================================
+        if state.get("follow_up_stage") == "awaiting_answer":
+            follow_up_question = state.get("pending_follow_up_question")
+            follow_up_key = state.get("current_follow_up")
+
+            if input_text:
+                intent = self.classify_intent(input_text, follow_up_question, chat_log)
+               
+                if intent == "answer":
+                    answer_validity = self.classify_answer(input_text, follow_up_question)
+
+                    if answer_validity == "satisfactory":
+                        # Save follow-up answer
+                        state["answers"][f"{follow_up_key}_followup"] = input_text
+
+                        # Clear follow-up state
+                        state.pop("follow_up_stage", None)
+                        state.pop("pending_follow_up_question", None)
+                        state.pop("current_follow_up", None)
+                        state.pop("follow_up_reason", None)
+
+                        # Move to next main question
+                        state = self.move_to_next_question(state)
+                        self.session_manager.update_state(session_id, state)
+
+                        next_question = state.get("current_question")
+                        if next_question:
+                            return {
+                                "status": "awaiting_input",
+                                "message": next_question,
+                                "session_id": session_id
+                            }
+
+                        return {
+                            "status": "completed",
+                            "message": "Thank you for completing the survey!",
+                            "session_id": session_id
+                        }
+
+                    # Invalid follow-up answer
+                    self.session_manager.update_state(session_id, state)
+                    return {
+                        "status": "repeat_followup",
+                        "message": f"{answer_validity}\n{follow_up_question}",
+                        "session_id": session_id
+                    }
+
+                elif intent == "greeting":
+                    response = self.greeting(input_text, chat_log)
+                    return {
+                        "status": "awaiting_followup",
+                        "message": f"{response}\n\n{follow_up_question}",
+                        "session_id": session_id
+                    }
+
+                elif intent == "repeat":
+                    return {
+                        "status": "awaiting_followup",
+                        "message": f"Here is the follow-up question again:\n{follow_up_question}",
+                        "session_id": session_id
+                    }
+
+                elif intent == "denial":
+                    state["negative_count"] += 1
+                    self.session_manager.update_state(session_id, state)
+
+                    if state["negative_count"] >= 2:
+                        return {
+                            "status": "ended",
+                            "message": "I understand. Thank you for your time. Goodbye.",
+                            "session_id": session_id
+                        }
+
+                    explanation = await self.purpose_classifier(
+                        input_text,
+                        "This follow-up helps clarify your previous answer."
+                    )
+
+                    return {
+                        "status": "denial",
+                        "message": explanation + "\nCould you please answer the follow-up question?",
+                        "session_id": session_id
+                    }
+
+                elif intent == "query":
+                    email = state["answers"].get("email", "default@example.com")
+                    response = await self.graph.ainvoke({
+                        "input": input_text,
+                        "has_image": has_image,
+                        "email": email,
+                        "session_id": session_id
+                    })
+
+                    return {
+                        "status": "awaiting_followup",
+                        "message": (
+                            response.get("response", "")
+                            + "\n\nPlease answer the follow-up question:\n"
+                            + follow_up_question
+                        ),
+                        "session_id": session_id
+                    }
+
+            return {
+                "status": "awaiting_followup",
+                "message": follow_up_question,
+                "session_id": session_id
+            }
+
+        # ============================================================
+        # MAIN QUESTION FLOW
+        # ============================================================
         if current_key is not None:
             print("Current question:", current_question)
 
@@ -901,14 +1040,12 @@ class IntentRouter:
 
                     if answer_validity == "satisfactory":
                         # Save primary answer
-                        answers[current_key] = input_text
-                        state["answers"] = answers
+                        state["answers"][current_key] = input_text
 
-                        # Check if a follow-up question exists for this key
+                        # Check for follow-up
                         follow_up = self.followup.get(current_key)
 
                         if follow_up:
-                            # Decide via LLM whether follow-up should be asked
                             ask_followup, reason = self.followup_llm(
                                 chat_log=state["answers"],
                                 question=current_question,
@@ -916,23 +1053,21 @@ class IntentRouter:
                                 follow_up=follow_up
                             )
 
-                            print("Follow-up decision:", ask_followup, "| Reason:", reason)
-
                             if ask_followup:
-                                # Track follow-up state
                                 state["current_follow_up"] = current_key
                                 state["pending_follow_up_question"] = follow_up
-                                state["follow_up_reason"] = reason  # optional (debug / audit)
+                                state["follow_up_reason"] = reason
+                                state["follow_up_stage"] = "awaiting_answer"
 
                                 self.session_manager.update_state(session_id, state)
 
                                 return {
-                                    "status": "awaiting_input",
+                                    "status": "awaiting_followup",
                                     "message": follow_up,
                                     "session_id": session_id
                                 }
 
-                        # Either no follow-up exists OR LLM decided to skip it
+                        # No follow-up → move ahead
                         state = self.move_to_next_question(state)
                         self.session_manager.update_state(session_id, state)
 
@@ -943,28 +1078,26 @@ class IntentRouter:
                                 "message": next_question,
                                 "session_id": session_id
                             }
-                        else:
-                            return {
-                                "status": "completed",
-                                "message": "Thank you for completing the survey!",
-                                "session_id": session_id
-                            }
 
-                    else:
-                        # Repeat same question
-                        self.session_manager.update_state(session_id, state)
                         return {
-                            "status": "repeat",
-                            "message": f"{answer_validity} Ok, let's try that again:\n{current_question}",
+                            "status": "completed",
+                            "message": "Thank you for completing the survey!",
                             "session_id": session_id
                         }
 
-                elif intent == "greeting":
+                    # Invalid main answer
                     self.session_manager.update_state(session_id, state)
-                    response_text = self.greeting(input_text, chat_log)
+                    return {
+                        "status": "repeat",
+                        "message": f"{answer_validity}\n{current_question}",
+                        "session_id": session_id
+                    }
+
+                elif intent == "greeting":
+                    response = self.greeting(input_text, chat_log)
                     return {
                         "status": "questioning",
-                        "message": f"{response_text} \n  + {current_question}",
+                        "message": f"{response}\n\n{current_question}",
                         "session_id": session_id
                     }
 
@@ -980,97 +1113,128 @@ class IntentRouter:
                     if state["negative_count"] >= 2:
                         return {
                             "status": "ended",
-                            "message": "I understand. Thank you for taking the time to talk to me. Goodbye",
+                            "message": "I understand. Thank you for your time. Goodbye.",
                             "session_id": session_id
                         }
+
                     explanation = await self.purpose_classifier(
                         input_text,
                         "May I ask you a few questions to better assist you?"
                     )
+
                     return {
                         "status": "denial",
-                        "message": explanation + "\nCould you please reconsider answering this question?",
+                        "message": explanation + "\nCould you please reconsider answering?",
                         "session_id": session_id
                     }
 
                 elif intent == "query":
-                    email = answers.get("email", "default@example.com")
-                    self.session_manager.update_state(session_id, state)
+                    email = state["answers"].get("email", "default@example.com")
                     response = await self.graph.ainvoke({
                         "input": input_text,
                         "has_image": has_image,
                         "email": email,
                         "session_id": session_id
                     })
-                    response_text = response.get("response", "")
+
                     return {
                         "status": "questioning",
-                        "message": response_text + "\nPlease reconsider answering the current question:\n" + current_question,
+                        "message": response.get("response", "") + "\n\n" + current_question,
                         "session_id": session_id
                     }
-                
-                elif intent == "correction":
-                    result = self.call_correction_llm(input_text, state["answers"])
 
-                    if result.get("certainty", "uncertain") == "uncertain":
-                        options = "\n".join([f"- {k}: {v}" for k, v in state["answers"].items()])
+                elif intent == "correction":
+                    session_chat_log = chat_log.get(session_id, [])
+                    result = self.call_correction_llm(
+                    user_input=input_text,
+                    answers_dict=state["answers"],
+                    questions=self.questions,
+                    chat_log=session_chat_log,
+                    current_key=state.get("current_key")
+                )
+
+                    if result.get("certainty") == "uncertain":
+                        options = "\n".join(
+                            [f"- {k}: {v}" for k, v in state["answers"].items()]
+                        )
                         return {
                             "status": "need_clarification",
                             "message": (
-                                "I understood that you want to make a correction, "
-                                "but I'm not sure which answer should be updated.\n\n"
-                                "Here are your previous responses:\n"
-                                f"{options}\n\n"
-                                "Which question would you like to correct?"
+                                "Which answer would you like to correct?\n\n" + options
                             ),
                             "session_id": session_id
                         }
 
-                    # Apply correction
-                    corrected_key = result.get("key")
-                    corrected_value = result.get("value")
-                    state["answers"][corrected_key] = corrected_value
+                    state["answers"][result["key"]] = result["value"]
                     self.session_manager.update_state(session_id, state)
 
-                    # Get question text from map
-                    question_text = state.get("questions_map", {}).get(corrected_key, corrected_key)
+                    question_text = state.get("questions_map", {}).get(
+                        result["key"], result["key"]
+                    )
 
                     return {
                         "status": "correction_applied",
-                        "message": f"Thanks! I've updated your answer for:\n{question_text}",
+                        "message": f"Updated answer for:\n{question_text}",
                         "session_id": session_id
                     }
-                
 
-            # Awaiting input
             return {
                 "status": "awaiting_input",
-                "message": f"Could you please answer the following question?\n{current_question}",
+                "message": f"Could you please answer:\n{current_question}",
                 "session_id": session_id
             }
-
-
 
 chat_log = {}
 
 
-def log_message(role: str, message: str, session_id: str):
-    if session_id not in chat_log:
-        chat_log[session_id] = []
-    chat_log[session_id].append({
+
+def log_message(session_id, role, content):
+    if role == "bot":
+        role = "assistant"
+
+    message = {
         "role": role,
-        "message": message
-    })
+        "content": content
+    }
+
+    r.rpush(f"chat:{session_id}", json.dumps(message))
+
+
+def get_chat_log(session_id):
+    chat_list = r.lrange(f"chat:{session_id}", 0, -1)
+    return [json.loads(x.decode()) for x in chat_list]
+
+
+# ---------------- ANSWERS ---------------- #
+
+def save_answer(session_id, key, value):
+    r.hset(f"answers:{session_id}", key, value)
+
+
+def get_answers(session_id):
+    answers_raw = r.hgetall(f"answers:{session_id}")
+    return {k.decode(): v.decode() for k, v in answers_raw.items()}
+
+
+# ---------------- BOT OUTPUT ---------------- #
 
 def print_bot_message(message: str, session_id: str):
     print(f"Bot: {message}")
-    log_message("bot", message, session_id)
+    log_message(session_id, "assistant", message)
 
 
-def save_chat_log(filepath="chat_log.json"):
+# ---------------- OPTIONAL: SAVE SESSION TO FILE ---------------- #
+
+def save_session_to_file(session_id, filepath="chat_log.json"):
+    data = {
+        "chat_log": get_chat_log(session_id),
+        "answers": get_answers(session_id)
+    }
+
     with open(filepath, "w") as f:
-        json.dump(chat_log, f, indent=2)
-    print(f"[INFO] Chat log saved to {filepath}")
+        json.dump(data, f, indent=2)
+
+    print(f"[INFO] Session {session_id} saved to {filepath}")
 
 
 async def chat_loop():
@@ -1097,7 +1261,8 @@ async def chat_loop():
             print("Exiting...")
             break
 
-        log_message("user", user_input, session_id)
+        # ✅ FIXED
+        log_message(session_id, "user", user_input)
 
         # Run router
         response = await router.run(user_input, session_id=session_id)
@@ -1105,22 +1270,24 @@ async def chat_loop():
         status = response.get("status")
 
         # Generalized message handling
-        bot_message = response.get("message") or response.get("question") or response.get("response") or "Something went wrong."
+        bot_message = (
+            response.get("message")
+            or response.get("question")
+            or response.get("response")
+        )
+
         if bot_message:
             print_bot_message(bot_message, session_id)
 
-        # Handle chat termination
         if status == "ended":
             break
 
-        # If status is 'repeat', ensure the same question is shown again
         if status == "repeat":
             continue
 
-        # If awaiting input or questioning, loop naturally for next user input
-        # All other statuses are handled by printing the message above
+    # ✅ Redis-based export instead of old save_chat_log
+    save_session_to_file(session_id)
 
-    save_chat_log()
 
 if __name__ == "__main__":
     asyncio.run(chat_loop())

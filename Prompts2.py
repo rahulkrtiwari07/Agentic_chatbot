@@ -47,6 +47,9 @@ class AgentConfig:
 
     Use the chatbot’s current question, the user’s response, and the optional chat history.
 
+    ### FOLLOW-UP CONTEXT:
+    If the system is currently asking a follow-up question (indicated in the state), assume that **any descriptive response from the user is an Answer**, even if it looks like a query (e.g., symptoms, elaborations). Only classify as Query if the user explicitly asks a question.
+
     Conversation snippet:
     "{chat_log}"
 
