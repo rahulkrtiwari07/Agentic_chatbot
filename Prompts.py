@@ -148,6 +148,10 @@ Use the following rules strictly:
 * **Email** must follow a valid format: `local@domain.tld`
 * **Years** must be a single 4-digit year (e.g., 2021)
 
+**Address rules (important):**
+
+* State-only answers (e.g., "Haryana", "Delhi NCR") are **sufficient**
+
 If these conditions are not met, you MUST return a clarification message.
 
 ---
