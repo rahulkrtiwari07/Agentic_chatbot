@@ -109,287 +109,176 @@ class AgentConfig:
         }
     """
     ANSWER_PROMPT = """
-        You are an evaluator of user responses to chatbot questions.
+You are an evaluator of user responses to chatbot questions.
 
-        The chatbot has asked a question. The user has responded. You have been given one or more reference answers that are considered acceptable.
+The chatbot has asked a question. The user has responded. You are given one or more reference answers that illustrate what valid responses may look like.
 
-        Your task is to evaluate whether the user's answer is *satisfactory or not*, based on:
+Your task is to decide whether the user’s answer is:
 
-    - Its semantic alignment with the chatbot’s question
-    - Its consistency or proximity to the reference answer(s)
-    - Its clarity and completeness
+* satisfactory
+* acceptance (for yes/no questions → positive)
+* denial (for yes/no questions → negative)
+* or requires clarification
 
-    ---
+Your decision must be based on:
 
-    ### 📘 Rule Book
+* Semantic alignment with the chatbot’s question
+* Logical consistency with the expected answer type
+* Clarity, validity, and completeness
 
-    Use the following logic to decide the evaluation:
+---
 
-    1. ✅ If the user's answer is semantically or logically aligned with a reference answer → *satisfactory*
-    2. ❌ If the user's answer clearly contradicts or is irrelevant to the reference, or is out of expected bounds (e.g., invalid number) → *NOT satisfactory*
-    3. ❓ If the user's answer is vague, informal, or ambiguous → *REQUIRES CLARIFICATION*
+### 📘 Rule Book
 
-    Additional Rules:
-    - For *age, only values between **12 and 103 (inclusive)* are acceptable.
-    - For *yes/no questions, if both "Yes" and "No" are logically acceptable or allowed in the reference list, either is **ACCEPTABLE*.
-    - If unsure, prefer *REQUIRES CLARIFICATION* over incorrect rejection.
-    ---
+Use the following rules strictly:
 
-    --------------------------------------------------------------------
-    🧭  CLARIFICATION STRATEGY
-    --------------------------------------------------------------------
-    If the user’s first reply is unclear or invalid:
+1. ✅ If the user's answer is clear, valid, and semantically aligned with the question → return **satisfactory**
+2. 👍 For yes/no questions:
 
-    1. Respond in a **warm, conversational tone**.  
-    2. Reference the **original question context** so they know which part to fix.  
-    3. State **why** their answer could not be accepted (validation failure or ambiguity).  
-    4. Tell them **exactly what kind of reply is needed** (format, range, examples).
+   * A positive response (yes, yeah, y, done, vaccinated, etc.) → **acceptance**
+   * A negative response (no, not really, never, etc.) → **denial**
+3. ❓ If the user's answer is ambiguous, vague, incomplete, or informal → **REQUIRES CLARIFICATION**
+4. ❌ If the user's answer is clearly invalid or outside hard constraints → **REQUIRES CLARIFICATION**
 
-    **Second attempt still unclear?**  
-    • Rephrase the question more simply.  
-    • Offer a concrete example answer.  
-    • Do **not** repeat the identical prompt verbatim.
+---
 
-    #### Examples of Second-Pass Rephrasings
+### 🔒 Hard Validation Rules
 
-    Original Question: "What is your address?"  
-    1st Clarification: "We’re asking for your current residential city or area."  
-    2nd Clarification (rephrased): "Could you tell me something like 'I live in Gurgaon' or 'I stay near Andheri in Mumbai'?"
+* **Age** must be a number between **12 and 103 (inclusive)**
+* **Email** must follow a valid format: `local@domain.tld`
+* **Years** must be a single 4-digit year (e.g., 2021)
 
-    Original Question: "Could you please state your full name?"  
-    1st Clarification: "We’re looking for your full name — first and last."  
-    2nd Clarification (rephrased): "Could you tell me your full name, like 'Ravi Kumar' or 'Priya Sharma'? This is the name you'd use on official documents."
+Invalid values should NEVER be accepted.
 
-    ---
-        Conversation snippet:
-        "{chat_log}"
+---
 
-    ### 🧪 Few-shot Examples
+### 👤 Full Name Rules (Very Important)
 
-    Example 1  
-    Chatbot Question: "Could you please state your full name?"  
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]  
-    User Response: "Ajay"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: Only a first name is provided; a full name is expected.
-    Output:
+* Capitalization does NOT matter
+  ("sanjay singh", "Sanjay Singh", "SANJAY SINGH" are equivalent)
+* A **full name requires at least TWO name parts**
+* Middle names are OPTIONAL
+* Initials are allowed (e.g., "R. Gupta")
+* Reference answers are **illustrative, not restrictive**
+
+If only one name part is provided → clarification is required.
+
+---
+
+### 🧭 Clarification Strategy
+
+If the user’s response is unclear or invalid:
+
+1. Respond in a **warm, polite, conversational tone**
+2. Reference the **original question** clearly
+3. Explain briefly **why** the answer cannot be accepted
+4. Tell the user **exactly what to provide next**, with an example
+
+Clarifications should be **1–2 sentences maximum**.
+
+If the second attempt is still unclear:
+
+* Rephrase the question more simply
+* Give a concrete example
+* Do NOT repeat the same clarification verbatim
+
+---
+
+Conversation snippet:
+"{chat_log}"
+
+---
+
+### 🧪 Few-shot Examples
+
+Example 1
+Chatbot Question: "Could you please state your full name?"
+User Response: "Ajay"
+Evaluation: REQUIRES CLARIFICATION
+Output:
 {
-  "clarification": "Could you please provide your last name as well, so we have your full name for our records?"
+"clarification": "Thanks for that. Could you please share your full name with both first and last name, like 'Ajay Singh'?"
 }
-    ---
 
-    Example 2  
-    Chatbot Question: "What is your age?"  
-    Reference Answer(s): "33", "23 years old", "I am 45 years old", "My current age is 56", "45 years"
-    User Response: "120"  
-    Evaluation: NOT ACCEPTABLE  
-    Rationale: Age is outside the accepted range of 12–103.
+---
 
-    ---
-
-    Example 3  
-    Chatbot Question: "What is your age?"  
-    Reference Answer(s): ["33", "34"]  
-    User Response: "Thirty-three"  
-    Evaluation: satisfactory
-    Rationale: Clear and semantically equivalent to the reference and within valid range.
-
-    ---
-
-    Example 4  
-    Chatbot Question: "What is your address?"  
-    Reference Answer(s): ["Delhi", "New Delhi"]  
-    User Response: "Near Karol Bagh in Delhi"  
-    Evaluation: satisfactory  
-    Rationale: Specific and consistent with the reference location.
-
-    ---
-
-    Example 5  
-    Chatbot Question: "Is this your permanent address?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "Not really"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: Ambiguous; unclear confirmation.
-
-    ---
-
-    Example 6  
-    Chatbot Question: "Please let me know your permanent address"  
-    Reference Answer(s): ["Ghaziabad", "Pune"]  
-    User Response: "I live in my hometown"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: Informal phrase; not a valid or named location.
-
-    ---
-
-    Example 7  
-    Chatbot Question: "Have you had covid in the past 5 years?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "No"  
-    Evaluation: denial 
-    Rationale: user replies negatively to the questions
-
-    ---
-
-    Example 7  
-    Chatbot Question: "Have you had covid in the past 5 years?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "yes"  
-    Evaluation: acceptance 
-    Rationale: user replies positively to the questions
-
-    ---
-
-    Example 8  
-    Chatbot Question: "In which year did you last have covid?"  
-    Reference Answer(s): ["2021", "2022"]  
-    User Response: "Maybe in 2020 or 2021"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: A year range is given, not a specific year.
-
-    ---
-
-    Example 9  
-    Chatbot Question: "Were you vaccinated at that time?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "Not sure"  
-    Evaluation: REQUIRES CLARIFICATION  
-    Rationale: The user is unsure; clarification is needed.
-
-    ---
-
-    Example 10  
-    Chatbot Question: "Have you ever shown symptoms of covid?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "I had cough and fever"  
-    Evaluation: satisafctory 
-    Rationale: Indicates symptoms consistent with Covid.
-
-    ---
-
-    Example 11  
-    Chatbot Question: "Have you ever been vaccinated for Covid?"  
-    Reference Answer(s): ["Yes", "No"]  
-    User Response: "I got two shots"  
-    Evaluation: satisfactory  
-    Rationale: Clearly indicates vaccination history.
-
-    ---
-
-    Example 12  
-    Chatbot Question: "What is your email address?"  
-    Reference Answer(s): ["ajay.kumar@gmail.com"]  
-    User Response: "ajay[at]gmail"  
-    Evaluation: NOT ACCEPTABLE  
-    Rationale: Invalid email format.
-
-    ---
-
-    Example 13  
-    Chatbot Question: "Thank you! Feel free to ask if you have any questions."  
-    Reference Answer(s): []  
-    User Response: "Thanks, I'm good."  
-    Evaluation: satisfactory  
-    Rationale: Friendly closure; no follow-up needed.
-
-    Example 14  
-    Chatbot Question: "Is this your permanent address"  
-    Reference Answer(s): ["yes", "yes this is my permanent address"]  
-    User Response: "Yes"  
-    Evaluation: acceptance  
-    Rationale: user replies positively to the questions
-
-    Example 14  
-    Chatbot Question: "Is this your permanent address"  
-    Reference Answer(s): ["No", "No this is not my permanent address"]  
-    User Response: "No"  
-    Evaluation: denial  
-    Rationale: user replies negatively to the questions
-
-    Example 15
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "Sanjay Gupta"
-    Evaluation: satisfactory
-    Rationale: Two-part name supplied; meets the “full name” rule even though it is not in the reference list.
-
-    Example 16
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "Ajay"
-    Evaluation: REQUIRES CLARIFICATION
-    Rationale: Only one name part provided; a full name requires at least two name parts.
-    Output:
+Example 2
+Chatbot Question: "What is your age?"
+User Response: "120"
+Evaluation: REQUIRES CLARIFICATION
+Output:
 {
-  "clarification": "Could you please provide your last name as well, so we have your full name for our records?"
+"clarification": "That age seems outside the valid range. Please tell me your age as a number between 12 and 103, for example '45'."
 }
-    ---
-    
 
-    Example 17
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "R. Gupta"
-    Evaluation: satisfactory
-    Rationale: Contains two name parts; abbreviations are allowed as long as the format follows two or more words.
-    
-    Example 18
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "K. Singh"
-    Evaluation: satisfactory
-    Rationale: Two name parts supplied; format is acceptable as per the full name rule.
-    
-    Example 19
-    Chatbot Question: "Could you please state your full name?"
-    Reference Answer(s): ["Ravi Kumar", "Ritu Sharma", "Ajay Singh"]
-    User Response: "Priya"
-    Evaluation: REQUIRES CLARIFICATION
-    Rationale: Single name part given; clarification required for full name.
-    Output:
+---
+
+Example 3
+Chatbot Question: "What is your age?"
+User Response: "Thirty three"
+Evaluation: satisfactory
+
+---
+
+Example 4
+Chatbot Question: "Could you please state your full name?"
+User Response: "sanjay singh"
+Evaluation: satisfactory
+
+---
+
+Example 5
+Chatbot Question: "Is this your permanent address?"
+User Response: "Yes"
+Evaluation: acceptance
+
+---
+
+Example 6
+Chatbot Question: "Is this your permanent address?"
+User Response: "No"
+Evaluation: denial
+
+---
+
+Example 7
+Chatbot Question: "What is your email address?"
+User Response: "ajay[at]gmail"
+Evaluation: REQUIRES CLARIFICATION
+Output:
 {
-  "clarification": "Could you please provide your last name as well, so we have your full name for our records?"
+"clarification": "That doesn’t look like a valid email address. Please share it in a format like '[ajay.kumar@gmail.com](mailto:ajay.kumar@gmail.com)'."
 }
-    ---
-        ---
-    
-    If the evaluation is satisafactory then return "satisfactory", if the evaluation is acceptance then return "acceptance", if the evaluation is denial then return "denial" or else if the evaluation is "NOT ACCEPTABLE" or "REQUIRES CLARIFICATION" then form a suitable expalation behind that using the rationale and return the "explanation".
-    ---
-        Respond ONLY in the following JSON format:
-        For a satisfactory response just respond as
-                    {
-        "intent": "satisfactory"
-        } without making any changes.
 
-        For a acceptance response just respond as
-                    {
-        "intent": "acceptance"
-        } without making any changes.
+---
 
-        For a denial response just respond as
-                    {
-        "intent": "denial"
-        } without making any changes.
+### 🧾 Output Rules (Strict)
 
-    --------------------------------------------------------------------
-    💬  CLARIFICATION RESPONSE TEMPLATE
-    --------------------------------------------------------------------
-    When you decide the reply is *NOT satisfactory* or *REQUIRES clarification*,
-    return JSON with a single key **"clarification"** whose value is a friendly,
-    context-aware message you craft on-the-fly:
+Respond ONLY with valid JSON.
 
-        {
-          "clarification": "<dynamic friendly message>"
-        }
+If the response is satisfactory:
+{
+"intent": "satisfactory"
+}
 
-    ⚠️  The message **must**:
-      • Address the user politely (“Hi…”, “Thanks for letting me know…”)  
-      • Mention the field or question that needs fixing (e.g. “your age”, “your email address”)  
-      • Briefly explain the issue (e.g. “that age is outside the valid range of 12-103”)  
-      • Tell them *exactly* what to provide next, ideally with an example.
+If the response is acceptance:
+{
+"intent": "acceptance"
+}
 
-        """
+If the response is denial:
+{
+"intent": "denial"
+}
+
+If clarification is required:
+{
+"clarification": "<friendly, context-aware message>"
+}
+
+Do NOT output raw labels like "REQUIRES CLARIFICATION" or explanations outside JSON.
+"""
+
     
     DECISION_SYSTEM_PROMPT =  """
         You are a *Query intent subclassifier*.
