@@ -1,5 +1,5 @@
 {
-  "9b5670e8-1d4d-4b60-a94a-4b17b949d93f": [
+  "dbc41135-546a-4384-b3eb-f5a0b6ab3938": [
     {
       "role": "bot",
       "message": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
@@ -14,11 +14,99 @@
     },
     {
       "role": "user",
-      "message": "Sun"
+      "message": "Snajay"
     },
     {
       "role": "bot",
-      "message": "Thanks for that. Could you please share your full name with both first and last name, like 'Sunita Sharma'?"
+      "message": "Thanks for that! Could you please provide your full name, including your first and last name, like 'Snajay Kumar'?"
+    },
+    {
+      "role": "user",
+      "message": "sanjay kumar"
+    },
+    {
+      "role": "bot",
+      "message": "What is your age?"
+    },
+    {
+      "role": "user",
+      "message": "30"
+    },
+    {
+      "role": "bot",
+      "message": "What is your address?"
+    },
+    {
+      "role": "user",
+      "message": "Haryana"
+    },
+    {
+      "role": "bot",
+      "message": "Is this your permanent address"
+    },
+    {
+      "role": "user",
+      "message": "Yes"
+    },
+    {
+      "role": "bot",
+      "message": "Thanks for the clarification.\nHave you have covid in the past 5 years?"
+    },
+    {
+      "role": "user",
+      "message": "No"
+    },
+    {
+      "role": "bot",
+      "message": "Thanks for the clarification.\nHave you ever shown symptons of covid"
+    },
+    {
+      "role": "user",
+      "message": "What are the symptoms of covid"
+    },
+    {
+      "role": "bot",
+      "message": "Common symptoms of COVID-19 include:\n- Loss of taste or smell\n- Extreme tiredness (fatigue)\n- Digestive symptoms such as upset stomach, vomiting, or diarrhea\n- Pain such as headaches and body or muscle aches\n- Fever or chills\n- Cold-like symptoms such as congestion, runny nose, or sore throat\n\nPeople may have only a few symptoms or none at all. Some symptoms may worsen about 7 to 14 days after they start.\nCould you please reconsider answering this question?\nHave you ever shown symptons of covid"
+    },
+    {
+      "role": "user",
+      "message": "no"
+    },
+    {
+      "role": "bot",
+      "message": "Have you ever been vaccinated for Covid?"
+    },
+    {
+      "role": "user",
+      "message": "no"
+    },
+    {
+      "role": "bot",
+      "message": "What is your email address?"
+    },
+    {
+      "role": "user",
+      "message": "rahul.tiwari"
+    },
+    {
+      "role": "bot",
+      "message": "Thank you! Feel free to ask if you have any questions."
+    },
+    {
+      "role": "user",
+      "message": "i don't have any question"
+    },
+    {
+      "role": "bot",
+      "message": "I understand. These questions help us improve our services and ensure we\u2019re providing the best possible experience. Your data is stored securely and in full compliance with the Digital Personal Data Protection Rules, 2025. Without this information, we won't be able to complete the survey.\nCould you please reconsider starting with a few questions?"
+    },
+    {
+      "role": "user",
+      "message": "no thanks"
+    },
+    {
+      "role": "bot",
+      "message": "That concludes my survey. Thank you for taking my call. Goodbye"
     }
   ]
 }

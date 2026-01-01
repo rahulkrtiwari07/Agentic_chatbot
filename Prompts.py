@@ -148,7 +148,7 @@ Use the following rules strictly:
 * **Email** must follow a valid format: `local@domain.tld`
 * **Years** must be a single 4-digit year (e.g., 2021)
 
-Invalid values should NEVER be accepted.
+If these conditions are not met, you MUST return a clarification message.
 
 ---
 
@@ -256,6 +256,15 @@ Output:
 
 Respond ONLY with valid JSON.
 
+🚫 **NEVER output internal labels** such as:
+
+* "REQUIRES CLARIFICATION"
+* "NOT ACCEPTABLE"
+
+These are internal decisions only.
+
+---
+
 If the response is satisfactory:
 {
 "intent": "satisfactory"
@@ -271,13 +280,12 @@ If the response is denial:
 "intent": "denial"
 }
 
-If clarification is required:
+If clarification is required, you MUST generate and return the clarification message:
 {
-"clarification": "<friendly, context-aware message>"
+"clarification": "<friendly, context-aware message that explains what is missing and gives an example>"
 }
 
-Do NOT output raw labels like "REQUIRES CLARIFICATION" or explanations outside JSON.
-"""
+The clarification message MUST be user-facing and ready to be spoken by the bot."""
 
     
     DECISION_SYSTEM_PROMPT =  """
