@@ -1,78 +1,120 @@
 {
-  "null": [
+  "1778f89a-8c22-403c-8f03-98510053aeaf": [
     {
-      "role": "user",
-      "message": "start123"
-    }
-  ],
-  "a058146b-8e58-4ba2-b83b-0802699a457d": [
+      "role": "bot",
+      "message": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
+    },
     {
       "role": "user",
       "message": "yes"
+    },
+    {
+      "role": "bot",
+      "message": "Could you please state your full name?"
     },
     {
       "role": "user",
       "message": "Rahul Tiwari"
     },
     {
-      "role": "user",
-      "message": "109"
+      "role": "bot",
+      "message": "What is your age?"
     },
     {
       "role": "user",
-      "message": "23"
+      "message": "23 years"
+    },
+    {
+      "role": "bot",
+      "message": "What is your address?"
     },
     {
       "role": "user",
-      "message": "Delhi"
+      "message": "I live in Delhi"
     },
     {
-      "role": "user",
-      "message": "why do you need my address"
+      "role": "bot",
+      "message": "Is this your permanent address"
     },
     {
       "role": "user",
       "message": "yes"
     },
     {
+      "role": "bot",
+      "message": "Thanks for the clarification.\nHave you have covid in the past 5 years?"
+    },
+    {
       "role": "user",
       "message": "No"
+    },
+    {
+      "role": "bot",
+      "message": "Thanks for the clarification.\nHave you ever shown symptons of covid"
     },
     {
       "role": "user",
       "message": "What are the symptoms of covid"
     },
     {
+      "role": "bot",
+      "message": "Common symptoms of COVID-19 include:\n- Loss of taste or smell\n- Extreme tiredness (fatigue)\n- Digestive symptoms such as upset stomach, vomiting, or diarrhea\n- Pain such as headaches and body or muscle aches\n- Fever or chills\n- Cold-like symptoms such as congestion, runny nose, or sore throat\n\nPeople may have only a few symptoms or none at all. Some symptoms may worsen about 7 to 14 days after they start.\nCould you please reconsider answering this question?\nHave you ever shown symptons of covid"
+    },
+    {
+      "role": "user",
+      "message": "No"
+    },
+    {
+      "role": "bot",
+      "message": "Have you ever been vaccinated for Covid?"
+    },
+    {
+      "role": "user",
+      "message": "What are the vaccines of covid"
+    },
+    {
+      "role": "bot",
+      "message": "The COVID-19 vaccines available include:\n\n- Pfizer-BioNTech COVID-19 vaccine 2024-2025 formula, for people age 6 months and older.\n- Moderna COVID-19 vaccine 2024-2025 formula, for people age 6 months and older.\n- Novavax COVID-19 vaccine, adjuvanted 2024-2025 formula, for people age 12 years and older.\n\nPeople age 5 and older with typical immune systems can receive any approved vaccine for their age. Some groups, such as children ages 6 months to 4 years and people with weakened immune systems, should get all doses from the same vaccine maker.\nCould you please reconsider answering this question?\nHave you ever been vaccinated for Covid?"
+    },
+    {
+      "role": "user",
+      "message": "yes"
+    },
+    {
+      "role": "bot",
+      "message": "What is your email address?"
+    },
+    {
+      "role": "user",
+      "message": "why do you need my email"
+    },
+    {
+      "role": "bot",
+      "message": "We require the email address that is registered in your government ID.\nCould you please reconsider answering this question?\nWhat is your email address?"
+    },
+    {
+      "role": "user",
+      "message": "rahul@gmail.com"
+    },
+    {
+      "role": "bot",
+      "message": "Thank you! Feel free to ask if you have any questions."
+    },
+    {
+      "role": "user",
+      "message": "No "
+    },
+    {
+      "role": "bot",
+      "message": "I understand. These questions help us improve our services and ensure we\u2019re providing the best possible experience for all users. Your data is stored securely and in full compliance with the Digital Personal Data Protection Rules, 2025. Without your input, we won't be able to complete the survey. Would you be willing to answer a couple of quick questions?\nCould you please reconsider starting with a few questions?"
+    },
+    {
       "role": "user",
       "message": "no"
     },
     {
-      "role": "user",
-      "message": "no"
-    },
-    {
-      "role": "user",
-      "message": "rahul@gmail.com"
-    },
-    {
-      "role": "user",
-      "message": "rahul@gmail.com"
-    },
-    {
-      "role": "user",
-      "message": "rahul@gmail.com"
-    },
-    {
-      "role": "user",
-      "message": "rahul@gmail.com"
-    },
-    {
-      "role": "user",
-      "message": "i have no questions"
-    },
-    {
-      "role": "user",
-      "message": "no"
+      "role": "bot",
+      "message": "That concludes my survey. Thank you for taking my call. Goodbye"
     }
   ]
 }

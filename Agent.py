@@ -18,7 +18,7 @@ from Prompts import AgentConfig
 from mongooperations import get_mongo_client, store_user_data
 from extract_mongo import retrieve_data
 
-from stream_lance import Retrieval  # Make sure this exists and is implemented
+from stream import Retrieval  # Make sure this exists and is implemented
 
 from uuid import uuid4
 from dotenv import load_dotenv
@@ -66,7 +66,7 @@ class IntentRouter:
 
         # Set up retrieval
         #self.retrieval = Retrieval(es_pass=self.es_pass)
-        self.retrieval = Retrieval()
+        self.retrieval = Retrieval(self.es_pass)
         self.retriever = self.retrieval.retrieve_data()
 
         self.questions = [

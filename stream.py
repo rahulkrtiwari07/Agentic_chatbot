@@ -47,9 +47,9 @@ def save_store(store):
 
 class Retrieval:
 
-    def __init__(self, es_pass, index_name="trial"):
+    def __init__(self, es_pass, index_name="covid"):
         es = Elasticsearch(
-            "http://164.52.194.17:9200",
+            "http://164.52.193.73:9201",
             basic_auth=('elastic', es_pass),
             request_timeout=60,
             verify_certs=False,
