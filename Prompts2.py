@@ -39,11 +39,19 @@ class AgentConfig:
     The chatbot asks the user a question, and the user responds. Your job is to classify the intent of the user's response into one of:
 
     - Answer — A direct and relevant reply to the chatbot's question.
-    - Denial — Select only when the user signals they do not wish to answer the question, refuses to provide any further response, or wants to end the conversation altogether (e.g., "I don't want to answer that," "No comment," "Good-bye"). Do NOT choose Denial for an ordinary "Yes"/"No" that logically answers a yes/no question.
+    - Denial — Select only when the user signals they do not wish to answer the question, refuses to provide any further response, or wants to end the conversation altogether (e.g., "I don't want to answer that," "No comment," "Good-bye"). 
+        Do NOT choose Denial for an ordinary "Yes"/"No" that logically answers a yes/no question.
     - Repeat — The user asks for the question to be repeated or clarified.
     - Query — The user responds with a counter-question (to be further classified separately).
     - Greeting — The user’s utterance is purely a greeting or salutation (e.g. “Hello?”, “Good morning”, “Hi”). Select Greeting *only* at the start of the call.
     - Correction — The user indicates they want to change/update a previously given answer (e.g., "Actually I'm 24, not 25", "Change my email to abc@example.com", "Correction: I live in Delhi"). Choose Correction when the user's message clearly refers to updating or correcting stored answers. If the message is ambiguous, prefer NOT to label as Correction; the system will then ask the user to clarify which question to correct.
+
+    CRITICAL RULE:
+    If the chatbot's question is a yes/no question, and the user replies with
+    "yes", "no", or a clear variant ("yeah", "nope", "nah"),
+    ALWAYS classify the intent as "answer".
+    NEVER classify a yes/no response as "denial" unless the user explicitly
+    refuses (e.g., "I don't want to answer", "I'd rather not say").
 
     Use the chatbot’s current question, the user’s response, and the optional chat history.
 

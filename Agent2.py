@@ -29,6 +29,7 @@ from question2 import QUESTIONS, FOLLOW_UP_QUESTIONS
 
 import redis
 
+
 r = redis.Redis(host='164.52.193.73', port=6379, db=0)
 
 mongo_uri = os.getenv('MONGO_URL')
@@ -215,9 +216,13 @@ class IntentRouter:
 
     def classify_intent(self, user_input, question=None, chat_log=None):
         if chat_log is None:
-            formatted_log = ""
-        else:
-            formatted_log = self.format_chat_log(chat_log)
+            session_id = getattr(self, "current_session_id", None)
+            if session_id:
+                chat_log = get_chat_log(session_id)
+            else:
+                chat_log = []
+
+        formatted_log = self.format_chat_log(chat_log) if chat_log else ""
 
         system_prompt = AgentConfig.INTENT_CLASSIFIER_PROMPT.replace("{chat_log}", formatted_log)
 
@@ -280,10 +285,21 @@ class IntentRouter:
 
 
     
-    def classify_answer(self, user_input, question=None):
+    def classify_answer(self, user_input, question=None, chat_log=None):
         print(question)
+        if chat_log is None:
+            session_id = getattr(self, "current_session_id", None)
+            if session_id:
+                chat_log = get_chat_log(session_id)
+            else:
+                chat_log = []
+
+        formatted_log = self.format_chat_log(chat_log) if chat_log else ""
+
+        system_prompt = AgentConfig.ANSWER_PROMPT.replace("{chat_log}", formatted_log)
+
         messages = [
-            {"role": "system", "content": AgentConfig.ANSWER_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
         ]
 
@@ -334,13 +350,20 @@ class IntentRouter:
 
         return value
     
-    def followup_llm(self, chat_log: dict, question: str, answer: str, follow_up: str):
+    def followup_llm(self, chat_log: list, question: str, answer: str, follow_up: str):
         # Format chat_log into readable Q/A pairs
-        formatted_chat_log = "\n".join([f"Q: {q}\nA: {a}" for q, a in chat_log.items()]) or "No previous questions."
+        if chat_log is None:
+            session_id = getattr(self, "current_session_id", None)
+            if session_id:
+                chat_log = get_chat_log(session_id)
+            else:
+                chat_log = []
+
+        formatted_log = self.format_chat_log(chat_log) if chat_log else ""
 
         # Fill the prompt template
         prompt = AgentConfig.FOLLOW_UP_DECIDER_PROMPT.format(
-            chat_log=formatted_chat_log,
+            chat_log=formatted_log,
             question=question,
             answer=answer,
             follow_up=follow_up
@@ -455,11 +478,19 @@ class IntentRouter:
         }
 
     
-    def greeting(self, user_input, question):
+    def greeting(self, user_input, question=None,session_id=None):
         print("greeting")
 
+        chat_log = get_chat_log(session_id) if session_id else []
+
+        # Format chat history
+        formatted_log = self.format_chat_log(chat_log) if chat_log else ""
+
+        prompt = AgentConfig.GREETING_PROMPT.replace("{chat_log}", formatted_log)
+
+        # Build messages including system prompt, chat history, and user input
         messages = [
-            {"role": "system", "content": AgentConfig.GREETING_PROMPT},
+            {"role": "system", "content": prompt},
             {"role": "user", "content": f"Q: {question}\nA: {user_input}" if question else user_input}
         ]
 
@@ -843,6 +874,8 @@ class IntentRouter:
         state["answers"] = answers
         state["session_id"] = session_id
 
+        chat_history = get_chat_log(session_id)
+
         # Handle initial welcome interaction
         if not state.get("welcomed", False):
             if input_text == "start123":
@@ -1047,7 +1080,7 @@ class IntentRouter:
 
                         if follow_up:
                             ask_followup, reason = self.followup_llm(
-                                chat_log=state["answers"],
+                                chat_log=get_chat_log(session_id) if session_id else [],
                                 question=current_question,
                                 answer=input_text,
                                 follow_up=follow_up
@@ -1174,7 +1207,7 @@ class IntentRouter:
 
                     return {
                         "status": "correction_applied",
-                        "message": f"Updated answer for:\n{question_text}",
+                        "message": f"Updated answer for:\n{question_text}: Could you please answer this:\n{current_question}",
                         "session_id": session_id
                     }
 
@@ -1187,6 +1220,9 @@ class IntentRouter:
 chat_log = {}
 
 
+import json
+
+# ---------------- CHAT LOG ---------------- #
 
 def log_message(session_id, role, content):
     if role == "bot":
@@ -1240,13 +1276,20 @@ def save_session_to_file(session_id, filepath="chat_log.json"):
 async def chat_loop():
     router = IntentRouter()
     session_id = None
+    
 
     # Start conversation
-    response = await router.run(input_text="start123", session_id=session_id)
+    response = await router.run(
+        input_text="start123",
+        session_id=session_id
+    )
     session_id = response.get("session_id", session_id)
 
-    # Print initial bot message
-    bot_message = response.get("message") or response.get("question", "")
+    bot_message = (
+        response.get("message")
+        or response.get("question")
+    )
+
     if bot_message:
         print_bot_message(bot_message, session_id)
 
@@ -1257,19 +1300,19 @@ async def chat_loop():
             print("\n[INFO] Input closed. Exiting chat.")
             break
 
-        if user_input.lower() in ["exit", "quit"]:
+        if user_input.lower() in ("exit", "quit"):
             print("Exiting...")
             break
 
-        # ✅ FIXED
+        # Log user input
         log_message(session_id, "user", user_input)
 
         # Run router
         response = await router.run(user_input, session_id=session_id)
         session_id = response.get("session_id", session_id)
+
         status = response.get("status")
 
-        # Generalized message handling
         bot_message = (
             response.get("message")
             or response.get("question")
@@ -1285,7 +1328,7 @@ async def chat_loop():
         if status == "repeat":
             continue
 
-    # ✅ Redis-based export instead of old save_chat_log
+    # Save full session from Redis
     save_session_to_file(session_id)
 
 

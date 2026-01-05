@@ -1,72 +1,9 @@
 {
-  "aff352d9-8e1d-45e1-a798-e2f1e1178307": [
+  "chat_log": [
     {
-      "role": "bot",
-      "message": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
-    },
-    {
-      "role": "user",
-      "message": "ok"
-    },
-    {
-      "role": "bot",
-      "message": "Could you please state your full name?"
-    },
-    {
-      "role": "user",
-      "message": "Rahul"
-    },
-    {
-      "role": "bot",
-      "message": "Thanks for that! Could you please share your full name with both first and last name, like 'Rahul Kumar'?"
-    },
-    {
-      "role": "user",
-      "message": "Rahul Tiwari"
-    },
-    {
-      "role": "bot",
-      "message": "What is your age?"
-    },
-    {
-      "role": "user",
-      "message": "35"
-    },
-    {
-      "role": "bot",
-      "message": "What is your address?"
-    },
-    {
-      "role": "user",
-      "message": "Haryana"
-    },
-    {
-      "role": "bot",
-      "message": "Is this your permanent address"
-    },
-    {
-      "role": "user",
-      "message": "yes"
-    },
-    {
-      "role": "bot",
-      "message": "Thanks for the clarification.\nHave you have covid in the past 5 years?"
-    },
-    {
-      "role": "user",
-      "message": "what kind of symptoms are you talking about"
-    },
-    {
-      "role": "bot",
-      "message": "I\u2019m asking about symptoms like fever, cough, or loss of smell the last time you had Covid, since this helps us understand your experience and symptom profile.\nCould you please reconsider answering this question?\nHave you have covid in the past 5 years?"
-    },
-    {
-      "role": "user",
-      "message": "no"
-    },
-    {
-      "role": "bot",
-      "message": "Thanks for the clarification.\nHave you ever shown symptons of covid"
+      "role": "assistant",
+      "content": "Hello! My name is Luna. I am calling on behalf of Microware. This call is in regards to our in house survey on Covid. May I ask you a few questions?"
     }
-  ]
+  ],
+  "answers": {}
 }
